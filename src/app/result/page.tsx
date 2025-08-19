@@ -3,8 +3,8 @@
 import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Sword, Shield, Target, HelpCircle, ArrowLeft } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Sword, Shield, Target, HelpCircle, ArrowLeft, Gamepad2 } from 'lucide-react';
 
 const weaponDetails = {
   sword: { icon: Sword, name: 'Sword', description: "A blade of pure courage! Ready to slash through your foes." },
@@ -23,6 +23,12 @@ function ResultContent() {
   
   const Icon = details.icon;
 
+  const handlePlayGame = () => {
+    if (weaponType) {
+      router.push(`/game?weapon=${weaponType}`);
+    }
+  };
+
   return (
     <main className="flex min-h-screen w-full flex-col items-center justify-center p-4">
       <Card className="w-full max-w-md text-center shadow-2xl shadow-primary/10">
@@ -34,11 +40,17 @@ function ResultContent() {
           <CardDescription className="text-lg">{details.description}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={() => router.push('/')} className="w-full bg-accent hover:bg-accent/90">
+            <Button onClick={handlePlayGame} className="w-full">
+              <Gamepad2 className="mr-2 h-4 w-4" />
+              Play Game
+            </Button>
+        </CardContent>
+        <CardFooter>
+          <Button onClick={() => router.push('/')} className="w-full" variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Draw Another Weapon
           </Button>
-        </CardContent>
+        </CardFooter>
       </Card>
     </main>
   );

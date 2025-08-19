@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import DrawingCanvas, { type DrawingCanvasRef } from '@/components/drawing-canvas';
-import { Eraser, Loader2, Sparkles } from 'lucide-react';
+import { Eraser, Loader2, Sparkles, Trophy } from 'lucide-react';
 import { classifyDrawingAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 
@@ -76,7 +76,11 @@ export default function Home() {
           </CardFooter>
         </Card>
         <footer className="text-center mt-8 text-sm text-muted-foreground">
-          <p>Powered by Firebase and Genkit AI</p>
+          <Button variant="ghost" onClick={() => router.push('/leaderboard')}>
+            <Trophy className="mr-2 h-4 w-4" />
+            View Leaderboard
+          </Button>
+          <p className="mt-2">Powered by Firebase and Genkit AI</p>
         </footer>
       </div>
     </main>

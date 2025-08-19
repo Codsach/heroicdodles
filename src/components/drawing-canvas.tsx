@@ -13,33 +13,32 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawing, setHasDrawing] = useState(false);
 
+  // This effect sets up the canvas and its drawing context.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const context = canvas.getContext('2d');
     if (!context) return;
+
     contextRef.current = context;
 
+    // Set initial drawing styles.
     const drawingStyle = {
       lineCap: 'round' as CanvasLineCap,
-      strokeStyle: '#0f172a', // Use a visible color by default
+      strokeStyle: '#0f172a',
       lineWidth: 5,
     };
-
-    const applyStyles = (ctx: CanvasRenderingContext2D) => {
-      ctx.lineCap = drawingStyle.lineCap;
-      ctx.strokeStyle = drawingStyle.strokeStyle;
-      ctx.lineWidth = drawingStyle.lineWidth;
-    };
     
-    applyStyles(context);
+    Object.assign(context, drawingStyle);
 
+    // This function resizes the canvas to fit its container.
     const resizeCanvas = () => {
       const parent = canvas.parentElement;
       if (!parent) return;
       const { width } = parent.getBoundingClientRect();
-      
+
+      // Save the current drawing.
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
       if (tempCtx) {
@@ -48,19 +47,32 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
         tempCtx.drawImage(canvas, 0, 0);
       }
 
+      // Resize the canvas.
       canvas.width = width;
       canvas.height = width * 0.75;
       
+      // Re-apply styles and restore the drawing.
       if (contextRef.current) {
-        applyStyles(contextRef.current);
-        if(tempCtx) {
+        Object.assign(contextRef.current, drawingStyle);
+        if (tempCtx) {
           contextRef.current.drawImage(tempCanvas, 0, 0);
         }
       }
     };
 
+    // Initial resize and setup listener for window resizing.
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
+
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+    };
+  }, []);
+
+  // This effect handles the drawing events.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
     const getEventPosition = (event: MouseEvent | TouchEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -73,7 +85,6 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
         clientX = event.touches[0].clientX;
         clientY = event.touches[0].clientY;
       } else {
-        // Should not happen, but as a fallback
         return { offsetX: 0, offsetY: 0 };
       }
 
@@ -84,47 +95,45 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
         offsetX: (clientX - rect.left) * scaleX, 
         offsetY: (clientY - rect.top) * scaleY 
       };
-    }
+    };
 
     const startDrawing = (event: MouseEvent | TouchEvent) => {
-      event.preventDefault(); // Prevent default touch actions like scrolling
       const { offsetX, offsetY } = getEventPosition(event);
       if (contextRef.current) {
         contextRef.current.beginPath();
         contextRef.current.moveTo(offsetX, offsetY);
         setIsDrawing(true);
-        setHasDrawing(true);
+        if (!hasDrawing) setHasDrawing(true);
       }
     };
 
-    const finishDrawing = (event: MouseEvent | TouchEvent) => {
-      event.preventDefault();
-      if (contextRef.current) {
-        contextRef.current.closePath();
-        setIsDrawing(false);
-      }
+    const finishDrawing = () => {
+        if (contextRef.current && isDrawing) {
+            contextRef.current.closePath();
+            setIsDrawing(false);
+        }
     };
+    
 
     const draw = (event: MouseEvent | TouchEvent) => {
       if (!isDrawing || !contextRef.current) return;
-      event.preventDefault();
       const { offsetX, offsetY } = getEventPosition(event);
       contextRef.current.lineTo(offsetX, offsetY);
       contextRef.current.stroke();
     };
 
-    // Add event listeners
+    // Add event listeners.
     canvas.addEventListener('mousedown', startDrawing);
     canvas.addEventListener('mouseup', finishDrawing);
     canvas.addEventListener('mousemove', draw);
     canvas.addEventListener('mouseleave', finishDrawing);
-    canvas.addEventListener('touchstart', startDrawing, { passive: false });
+    canvas.addEventListener('touchstart', startDrawing);
     canvas.addEventListener('touchend', finishDrawing);
     canvas.addEventListener('touchcancel', finishDrawing);
-    canvas.addEventListener('touchmove', draw, { passive: false });
+    canvas.addEventListener('touchmove', draw);
 
+    // Cleanup listeners.
     return () => {
-      window.removeEventListener('resize', resizeCanvas);
       canvas.removeEventListener('mousedown', startDrawing);
       canvas.removeEventListener('mouseup', finishDrawing);
       canvas.removeEventListener('mousemove', draw);
@@ -134,7 +143,7 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       canvas.removeEventListener('touchcancel', finishDrawing);
       canvas.removeEventListener('touchmove', draw);
     };
-  }, [isDrawing]);
+  }, [isDrawing, hasDrawing]);
 
   useImperativeHandle(ref, () => ({
     clear() {
