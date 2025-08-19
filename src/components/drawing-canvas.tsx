@@ -40,16 +40,21 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       if (!parent) return;
       const { width } = parent.getBoundingClientRect();
       
-      // Get current drawing data to restore it after resize
-      const drawingData = contextRef.current?.getImageData(0, 0, canvas.width, canvas.height);
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      if (tempCtx) {
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        tempCtx.drawImage(canvas, 0, 0);
+      }
 
       canvas.width = width;
       canvas.height = width * 0.75;
       
       if (contextRef.current) {
         applyStyles(contextRef.current);
-        if(drawingData) {
-          contextRef.current.putImageData(drawingData, 0, 0);
+        if(tempCtx) {
+          contextRef.current.drawImage(tempCanvas, 0, 0);
         }
       }
     };
@@ -59,22 +64,32 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
 
     const getEventPosition = (event: MouseEvent | TouchEvent) => {
       const rect = canvas.getBoundingClientRect();
+      let clientX, clientY;
+
       if (event instanceof MouseEvent) {
-        return { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+        clientX = event.clientX;
+        clientY = event.clientY;
+      } else if (event.touches && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+      } else {
+        return { offsetX: 0, offsetY: 0 };
       }
-      if (event.touches && event.touches.length > 0) {
-        return { offsetX: event.touches[0].clientX - rect.left, offsetY: event.touches[0].clientY - rect.top };
-      }
-      return { offsetX: 0, offsetY: 0 };
+
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      return { 
+        offsetX: (clientX - rect.left) * scaleX, 
+        offsetY: (clientY - rect.top) * scaleY 
+      };
     }
 
-    let currentIsDrawing = false;
     const startDrawing = (event: MouseEvent | TouchEvent) => {
       const { offsetX, offsetY } = getEventPosition(event);
       if (contextRef.current) {
         contextRef.current.beginPath();
         contextRef.current.moveTo(offsetX, offsetY);
-        currentIsDrawing = true;
         setIsDrawing(true);
         setHasDrawing(true);
       }
@@ -83,13 +98,12 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
     const finishDrawing = () => {
       if (contextRef.current) {
         contextRef.current.closePath();
-        currentIsDrawing = false;
         setIsDrawing(false);
       }
     };
 
     const draw = (event: MouseEvent | TouchEvent) => {
-      if (!currentIsDrawing || !contextRef.current) return;
+      if (!isDrawing || !contextRef.current) return;
       const { offsetX, offsetY } = getEventPosition(event);
       contextRef.current.lineTo(offsetX, offsetY);
       contextRef.current.stroke();
@@ -99,10 +113,10 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
     canvas.addEventListener('mouseup', finishDrawing);
     canvas.addEventListener('mousemove', draw);
     canvas.addEventListener('mouseleave', finishDrawing);
-    canvas.addEventListener('touchstart', startDrawing);
+    canvas.addEventListener('touchstart', startDrawing, { passive: false });
     canvas.addEventListener('touchend', finishDrawing);
     canvas.addEventListener('touchcancel', finishDrawing);
-    canvas.addEventListener('touchmove', draw);
+    canvas.addEventListener('touchmove', draw, { passive: false });
 
     return () => {
       window.removeEventListener('resize', resizeCanvas);
