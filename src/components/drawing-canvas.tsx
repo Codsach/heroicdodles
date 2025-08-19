@@ -13,6 +13,13 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawing, setHasDrawing] = useState(false);
 
+  // Store style in a ref to avoid re-creating it on every render
+  const drawingStyleRef = useRef({
+    lineCap: 'round' as CanvasLineCap,
+    strokeStyle: '#0f172a', // dark slate color
+    lineWidth: 5,
+  });
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -20,11 +27,10 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
     const parent = canvas.parentElement;
     if (!parent) return;
 
-    // We need to keep the drawing style in a ref so we can re-apply it on resize
-    const drawingStyle = {
-      lineCap: 'round' as CanvasLineCap,
-      strokeStyle: '#0f172a', // dark slate color
-      lineWidth: 5,
+    const applyStyles = (context: CanvasRenderingContext2D) => {
+      context.lineCap = drawingStyleRef.current.lineCap;
+      context.strokeStyle = drawingStyleRef.current.strokeStyle;
+      context.lineWidth = drawingStyleRef.current.lineWidth;
     };
 
     const resizeCanvas = () => {
@@ -34,14 +40,18 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       
       const context = canvas.getContext('2d');
       if (context) {
-        context.lineCap = drawingStyle.lineCap;
-        context.strokeStyle = drawingStyle.strokeStyle;
-        context.lineWidth = drawingStyle.lineWidth;
+        applyStyles(context); // Re-apply styles on resize
         contextRef.current = context;
       }
     };
     
-    resizeCanvas();
+    // Initial setup
+    const context = canvas.getContext('2d');
+    if (context) {
+        contextRef.current = context;
+        resizeCanvas();
+    }
+    
     window.addEventListener('resize', resizeCanvas);
 
     return () => {
@@ -62,32 +72,28 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
   }
 
   const startDrawing = (event: MouseEvent | TouchEvent) => {
-    if (!(event instanceof MouseEvent)) {
-        event.preventDefault();
-    }
+    event.preventDefault();
     const { offsetX, offsetY } = getEventPosition(event);
-    contextRef.current?.beginPath();
-    contextRef.current?.moveTo(offsetX, offsetY);
+    if (!contextRef.current) return;
+    contextRef.current.beginPath();
+    contextRef.current.moveTo(offsetX, offsetY);
     setIsDrawing(true);
     setHasDrawing(true);
   };
 
   const finishDrawing = (event: MouseEvent | TouchEvent) => {
-    if (!(event instanceof MouseEvent)) {
-      event.preventDefault();
-    }
-    contextRef.current?.closePath();
+    event.preventDefault();
+    if (!contextRef.current) return;
+    contextRef.current.closePath();
     setIsDrawing(false);
   };
 
   const draw = (event: MouseEvent | TouchEvent) => {
-    if (!isDrawing) return;
-    if (!(event instanceof MouseEvent)) {
-      event.preventDefault();
-    }
+    if (!isDrawing || !contextRef.current) return;
+    event.preventDefault();
     const { offsetX, offsetY } = getEventPosition(event);
-    contextRef.current?.lineTo(offsetX, offsetY);
-    contextRef.current?.stroke();
+    contextRef.current.lineTo(offsetX, offsetY);
+    contextRef.current.stroke();
   };
 
   useImperativeHandle(ref, () => ({
@@ -100,7 +106,30 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       }
     },
     toDataURL() {
-      return hasDrawing ? canvasRef.current?.toDataURL('image/png') : undefined;
+      // Return undefined if nothing has been drawn to avoid sending an empty image
+      if (!hasDrawing) {
+        return undefined;
+      }
+
+      const canvas = canvasRef.current;
+      if (!canvas) return undefined;
+      
+      // Create a new canvas to draw a white background
+      const newCanvas = document.createElement('canvas');
+      newCanvas.width = canvas.width;
+      newCanvas.height = canvas.height;
+      const newContext = newCanvas.getContext('2d');
+
+      if (!newContext) return undefined;
+
+      // Fill background with white
+      newContext.fillStyle = 'white';
+      newContext.fillRect(0, 0, newCanvas.width, newCanvas.height);
+
+      // Draw the original content on top
+      newContext.drawImage(canvas, 0, 0);
+
+      return newCanvas.toDataURL('image/png');
     },
   }));
 
@@ -110,8 +139,10 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       onMouseDown={startDrawing}
       onMouseUp={finishDrawing}
       onMouseMove={draw}
+      onMouseLeave={finishDrawing} // Stop drawing if mouse leaves canvas
       onTouchStart={startDrawing}
       onTouchEnd={finishDrawing}
+      onTouchCancel={finishDrawing} // Stop drawing on touch cancel
       onTouchMove={draw}
       className="w-full h-auto aspect-[4/3] bg-white rounded-md border-2 border-dashed cursor-crosshair touch-none"
     />
