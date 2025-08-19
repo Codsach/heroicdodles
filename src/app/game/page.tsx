@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Home, Loader2, Trophy, ArrowUp, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Home, Loader2, Trophy, ArrowLeft, ArrowRight, ShieldAlert, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -13,12 +13,16 @@ import { v4 as uuidv4 } from 'uuid';
 // Game Constants
 const PLAYER_WIDTH = 50;
 const PLAYER_HEIGHT = 100;
-const PLAYER_SPEED = 5;
-const JUMP_VELOCITY = 22; // Increased jump height
-const GRAVITY = 0.8;
-const ENEMY_WIDTH = 40;
-const ENEMY_HEIGHT = 40;
-const ENEMY_SPEED = 2;
+const PLAYER_SPEED = 7;
+const SHIELD_DAMAGE_REDUCTION = 0.5;
+
+const METEOR_WIDTH = 20;
+const METEOR_HEIGHT = 20;
+const METEOR_SPEED = 3;
+
+const BULLET_WIDTH = 5;
+const BULLET_HEIGHT = 15;
+const BULLET_SPEED = 10;
 
 type WeaponType = 'sword' | 'gun' | 'shield';
 
@@ -38,17 +42,20 @@ function GameContent() {
   const [isSaving, setIsSaving] = useState(false);
 
   // Player State
-  const playerRef = useRef({ x: 100, y: 0, width: PLAYER_WIDTH, height: PLAYER_HEIGHT, vx: 0, vy: 0, health: 100, onGround: true });
-  const keysRef = useRef({ ArrowLeft: false, ArrowRight: false, ' ': false, ArrowUp: false });
+  const playerRef = useRef({ x: 100, y: 0, width: PLAYER_WIDTH, height: PLAYER_HEIGHT, health: 100, isSwinging: false, swingAngle: 0 });
+  const keysRef = useRef({ ArrowLeft: false, ArrowRight: false, ' ': false });
+  
+  // Bullets State
+  const bulletsRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
 
-  // Enemies State
-  const enemiesRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
-  const enemySpawnTimerRef = useRef(0);
+  // Meteors State
+  const meteorsRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
+  const meteorSpawnTimerRef = useRef(0);
 
   const drawPlayer = (ctx: CanvasRenderingContext2D, player: any) => {
-    // Body
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 3;
+    // Body
     ctx.beginPath();
     ctx.moveTo(player.x, player.y - player.height / 2); // neck
     ctx.lineTo(player.x, player.y + player.height / 3); // torso
@@ -60,7 +67,7 @@ function GameContent() {
     ctx.moveTo(player.x, player.y + player.height / 3);
     ctx.lineTo(player.x + player.width / 4, player.y + player.height / 2);
     ctx.stroke();
-    // Arms & Weapon
+    // Arms
     ctx.beginPath();
     const armY = player.y - player.height / 4;
     ctx.moveTo(player.x - player.width / 3, armY);
@@ -73,31 +80,39 @@ function GameContent() {
     ctx.stroke();
     
     // Draw Weapon
-    const weaponX = player.x + player.width / 3;
-    const weaponY = player.y - player.height / 4;
+    const weaponArmX = player.x + player.width / 3;
+    const weaponArmY = player.y - player.height / 4;
     ctx.fillStyle = '#666';
     ctx.strokeStyle = '#333';
     
     switch (weaponType) {
         case 'sword':
-            ctx.fillRect(weaponX, weaponY - 40, 5, 40); // blade
-            ctx.fillRect(weaponX - 5, weaponY, 15, 5); // hilt
+            ctx.save();
+            ctx.translate(weaponArmX, weaponArmY);
+            if (player.isSwinging) {
+              ctx.rotate(player.swingAngle);
+            }
+            ctx.fillRect(0, -40, 5, 40); // blade
+            ctx.fillRect(-5, 0, 15, 5); // hilt
+            ctx.restore();
             break;
         case 'gun':
-            ctx.fillRect(weaponX, weaponY - 5, 30, 10);
+            ctx.fillRect(weaponArmX, weaponArmY - 5, 30, 10);
             break;
         case 'shield':
-            ctx.beginPath();
-            ctx.arc(player.x - player.width/3, armY, 25, -Math.PI/2, Math.PI/2);
-            ctx.fill();
-            break;
+             ctx.beginPath();
+             const shieldX = player.x - player.width / 3;
+             ctx.arc(shieldX, armY, 25, Math.PI * 1.5, Math.PI * 0.5);
+             ctx.fill();
+             ctx.stroke();
+             break;
     }
   };
 
-  const drawEnemies = (ctx: CanvasRenderingContext2D) => {
-    ctx.fillStyle = 'red';
-    enemiesRef.current.forEach(enemy => {
-      ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+  const drawProjectiles = (ctx: CanvasRenderingContext2D, list: any[], color: string) => {
+    ctx.fillStyle = color;
+    list.forEach(item => {
+      ctx.fillRect(item.x, item.y, item.width, item.height);
     });
   };
 
@@ -111,7 +126,7 @@ function GameContent() {
     ctx.strokeRect(10, 10, 200, 20);
     ctx.fillStyle = 'white';
     ctx.font = '16px Arial';
-    ctx.fillText(`${playerRef.current.health}/100`, 80, 25);
+    ctx.fillText(`${Math.max(0, playerRef.current.health)}/100`, 80, 25);
     
     // Score
     ctx.fillStyle = 'black';
@@ -119,115 +134,160 @@ function GameContent() {
     ctx.fillText(`Score: ${score}`, ctx.canvas.width - 150, 30);
   };
   
-  const handleJump = () => {
+  const handleAttack = useCallback(() => {
     const player = playerRef.current;
-    if (player.onGround) {
-        player.vy = -JUMP_VELOCITY;
-        player.onGround = false;
+    switch (weaponType) {
+        case 'gun':
+            bulletsRef.current.push({
+                x: player.x + player.width / 3,
+                y: player.y - player.height / 4,
+                width: BULLET_WIDTH,
+                height: BULLET_HEIGHT
+            });
+            break;
+        case 'sword':
+            if (!player.isSwinging) {
+                player.isSwinging = true;
+                player.swingAngle = -Math.PI / 2;
+            }
+            break;
+        case 'shield':
+            // Shield is passive
+            break;
     }
-  };
-
-  const movePlayer = (direction: 'left' | 'right') => {
-    const player = playerRef.current;
-    if (direction === 'left') {
-      player.x -= PLAYER_SPEED;
-    } else {
-      player.x += PLAYER_SPEED;
-    }
-  };
+  }, [weaponType]);
 
   const gameLoop = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || gameOver) return;
     
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     const player = playerRef.current;
     
     // Player movement
-    if (keysRef.current.ArrowLeft) movePlayer('left');
-    if (keysRef.current.ArrowRight) movePlayer('right');
-    if ((keysRef.current[' '] || keysRef.current.ArrowUp) && player.onGround) {
-        handleJump();
-    }
-    
-    // Apply gravity
-    player.vy += GRAVITY;
-    player.y += player.vy;
-    
-    // Ground collision
-    if (player.y + player.height / 2 > canvas.height - 20) {
-        player.y = canvas.height - 20 - player.height / 2;
-        player.vy = 0;
-        player.onGround = true;
+    if (keysRef.current.ArrowLeft) player.x -= PLAYER_SPEED;
+    if (keysRef.current.ArrowRight) player.x += PLAYER_SPEED;
+
+    // Player attack
+    if (keysRef.current[' ']) {
+        handleAttack();
+        keysRef.current[' '] = false; // Prevent continuous fire/swing
     }
 
     // Canvas bounds
     if (player.x - player.width/2 < 0) player.x = player.width/2;
     if (player.x + player.width/2 > canvas.width) player.x = canvas.width - player.width/2;
 
-    // Spawn Enemies
-    enemySpawnTimerRef.current++;
-    if (enemySpawnTimerRef.current > 120) { // Spawn every 2 seconds
-        const y = canvas.height - 20 - ENEMY_HEIGHT;
-        const x = Math.random() < 0.5 ? 0 : canvas.width - ENEMY_WIDTH;
-        enemiesRef.current.push({ x, y, width: ENEMY_WIDTH, height: ENEMY_HEIGHT });
-        enemySpawnTimerRef.current = 0;
+    // Update sword swing
+    if (player.isSwinging) {
+        player.swingAngle += Math.PI / 10;
+        if (player.swingAngle >= Math.PI / 4) {
+            player.isSwinging = false;
+            player.swingAngle = 0;
+        }
     }
 
-    // Update and check enemies
-    enemiesRef.current.forEach((enemy, index) => {
-        // Move enemy
-        if (enemy.x < player.x) enemy.x += ENEMY_SPEED;
-        else enemy.x -= ENEMY_SPEED;
+    // Spawn Meteors
+    meteorSpawnTimerRef.current++;
+    if (meteorSpawnTimerRef.current > 60) { // Spawn every second
+        const x = Math.random() * (canvas.width - METEOR_WIDTH);
+        meteorsRef.current.push({ x, y: -METEOR_HEIGHT, width: METEOR_WIDTH, height: METEOR_HEIGHT });
+        meteorSpawnTimerRef.current = 0;
+    }
 
-        // Player-Enemy collision
+    // Update bullets
+    bulletsRef.current.forEach((bullet, index) => {
+        bullet.y -= BULLET_SPEED;
+        if (bullet.y < 0) {
+            bulletsRef.current.splice(index, 1);
+        }
+    });
+
+    // Update Meteors & check collisions
+    meteorsRef.current.forEach((meteor, meteorIndex) => {
+        meteor.y += METEOR_SPEED;
+
+        // Meteor-player collision
         const isColliding =
-            player.x < enemy.x + enemy.width &&
-            player.x + player.width > enemy.x &&
-            player.y - player.height/2 < enemy.y + enemy.height &&
-            player.y + player.height/2 > enemy.y;
-
-        if (isColliding && player.onGround) { // Only take damage if on the ground
-            player.health -= 10;
-            enemiesRef.current.splice(index, 1); // remove enemy on hit
+            player.x < meteor.x + meteor.width &&
+            player.x + player.width > meteor.x &&
+            player.y - player.height/2 < meteor.y + meteor.height &&
+            player.y + player.height/2 > meteor.y;
+        
+        if (isColliding) {
+            meteorsRef.current.splice(meteorIndex, 1);
+            const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
+            player.health -= damage;
             if (player.health <= 0) {
-                player.health = 0;
                 setGameOver(true);
+            }
+            return;
+        }
+        
+        if (meteor.y > canvas.height) {
+            meteorsRef.current.splice(meteorIndex, 1);
+        }
+
+        // Bullet-meteor collision
+        bulletsRef.current.forEach((bullet, bulletIndex) => {
+            if (
+                bullet.x < meteor.x + meteor.width &&
+                bullet.x + bullet.width > meteor.x &&
+                bullet.y < meteor.y + meteor.height &&
+                bullet.y + bullet.height > meteor.y
+            ) {
+                bulletsRef.current.splice(bulletIndex, 1);
+                meteorsRef.current.splice(meteorIndex, 1);
+                setScore(prev => prev + 10);
+            }
+        });
+        
+        // Sword-meteor collision
+        if (weaponType === 'sword' && player.isSwinging) {
+            const swordTipX = player.x + player.width/3 + 30 * Math.sin(player.swingAngle);
+            const swordTipY = player.y - player.height/4 - 30 * Math.cos(player.swingAngle);
+            if (
+                swordTipX > meteor.x && swordTipX < meteor.x + meteor.width &&
+                swordTipY > meteor.y && swordTipY < meteor.y + meteor.height
+            ) {
+                 meteorsRef.current.splice(meteorIndex, 1);
+                 setScore(prev => prev + 10);
             }
         }
     });
 
-    // Update score
-    if(!gameOver) {
-        setScore(prev => prev + 1);
-    }
-    
     // Draw everything
     drawPlayer(ctx, player);
-    drawEnemies(ctx);
+    drawProjectiles(ctx, bulletsRef.current, 'blue');
+    drawProjectiles(ctx, meteorsRef.current, 'orange');
     drawUI(ctx);
     
     if (!gameOver) {
       gameLoopRef.current = requestAnimationFrame(gameLoop);
     }
-  }, [gameOver, score, weaponType]);
+  }, [gameOver, score, weaponType, handleAttack]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
         canvas.width = 1000;
         canvas.height = 500;
-        playerRef.current.y = canvas.height - 20 - playerRef.current.height / 2;
+        const groundY = canvas.height - 20;
+        playerRef.current.y = groundY - playerRef.current.height / 2;
+        playerRef.current.x = canvas.width / 2;
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key in keysRef.current) keysRef.current[e.key as keyof typeof keysRef.current] = true;
+      if (e.key in keysRef.current && !e.repeat) {
+          keysRef.current[e.key as keyof typeof keysRef.current] = true;
+      }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key in keysRef.current) keysRef.current[e.key as keyof typeof keysRef.current] = false;
+      if (e.key in keysRef.current) {
+          keysRef.current[e.key as keyof typeof keysRef.current] = false;
+      }
     };
     
     window.addEventListener('keydown', handleKeyDown);
@@ -311,13 +371,14 @@ function GameContent() {
           <canvas ref={canvasRef} className="bg-gray-200 rounded-md shadow-lg" />
           <div className="flex gap-4 mt-4">
             <Button onMouseDown={() => keysRef.current.ArrowLeft = true} onMouseUp={() => keysRef.current.ArrowLeft = false} onMouseLeave={() => keysRef.current.ArrowLeft = false} className="p-4">
-              <ArrowLeft className="mr-2 h-4 w-4" /> Left
+              <ArrowLeft /> Left
             </Button>
-            <Button onClick={handleJump} className="p-4">
-              <ArrowUp className="mr-2 h-4 w-4" /> Jump
+            <Button onClick={handleAttack} className="p-4">
+                {weaponType === 'shield' ? <ShieldAlert /> : <Zap />}
+                {weaponType === 'shield' ? 'Brace' : 'Fire'}
             </Button>
             <Button onMouseDown={() => keysRef.current.ArrowRight = true} onMouseUp={() => keysRef.current.ArrowRight = false} onMouseLeave={() => keysRef.current.ArrowRight = false} className="p-4">
-              Right <ArrowRight className="ml-2 h-4 w-4" />
+              Right <ArrowRight />
             </Button>
           </div>
         </>
@@ -339,3 +400,5 @@ export default function GamePage() {
       </Suspense>
     );
   }
+
+    
