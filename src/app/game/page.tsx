@@ -126,7 +126,7 @@ function GameContent() {
     ctx.strokeRect(10, 10, 200, 20);
     ctx.fillStyle = 'white';
     ctx.font = '16px Arial';
-    ctx.fillText(`${Math.max(0, playerRef.current.health)}/100`, 80, 25);
+    ctx.fillText(`${Math.max(0, Math.round(playerRef.current.health))}/100`, 80, 25);
     
     // Score
     ctx.fillStyle = 'black';
@@ -139,7 +139,7 @@ function GameContent() {
     switch (weaponType) {
         case 'gun':
             bulletsRef.current.push({
-                x: player.x + player.width / 3,
+                x: player.x + player.width / 3 + 30, // Start bullet at the gun barrel
                 y: player.y - player.height / 4,
                 width: BULLET_WIDTH,
                 height: BULLET_HEIGHT
@@ -193,69 +193,69 @@ function GameContent() {
     meteorSpawnTimerRef.current++;
     if (meteorSpawnTimerRef.current > 60) { // Spawn every second
         const x = Math.random() * (canvas.width - METEOR_WIDTH);
-        meteorsRef.current.push({ x, y: -METEOR_HEIGHT, width: METEOR_WIDTH, height: METEOR_HEIGHT });
+        meteorsRef.current.push({ x, y: 0, width: METEOR_WIDTH, height: METEOR_HEIGHT });
         meteorSpawnTimerRef.current = 0;
     }
 
     // Update bullets
-    bulletsRef.current.forEach((bullet, index) => {
+    bulletsRef.current = bulletsRef.current.filter(bullet => bullet.y > 0);
+    bulletsRef.current.forEach(bullet => {
         bullet.y -= BULLET_SPEED;
-        if (bullet.y < 0) {
-            bulletsRef.current.splice(index, 1);
-        }
     });
 
     // Update Meteors & check collisions
-    meteorsRef.current.forEach((meteor, meteorIndex) => {
-        meteor.y += METEOR_SPEED;
+    meteorsRef.current = meteorsRef.current.filter(meteor => {
+      meteor.y += METEOR_SPEED;
 
-        // Meteor-player collision
-        const isColliding =
-            player.x < meteor.x + meteor.width &&
-            player.x + player.width > meteor.x &&
-            player.y - player.height/2 < meteor.y + meteor.height &&
-            player.y + player.height/2 > meteor.y;
-        
-        if (isColliding) {
-            meteorsRef.current.splice(meteorIndex, 1);
-            const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
-            player.health -= damage;
-            if (player.health <= 0) {
-                setGameOver(true);
-            }
-            return;
-        }
-        
-        if (meteor.y > canvas.height) {
-            meteorsRef.current.splice(meteorIndex, 1);
-        }
+      // Meteor-player collision
+      const isCollidingWithPlayer =
+          player.x < meteor.x + meteor.width &&
+          player.x + player.width > meteor.x &&
+          player.y - player.height/2 < meteor.y + meteor.height &&
+          player.y + player.height/2 > meteor.y;
+      
+      if (isCollidingWithPlayer) {
+          const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
+          player.health -= damage;
+          if (player.health <= 0) {
+              setGameOver(true);
+          }
+          return false; // Remove meteor
+      }
+      
+      if (meteor.y > canvas.height) {
+          return false; // Remove meteor
+      }
 
-        // Bullet-meteor collision
-        bulletsRef.current.forEach((bullet, bulletIndex) => {
-            if (
-                bullet.x < meteor.x + meteor.width &&
-                bullet.x + bullet.width > meteor.x &&
-                bullet.y < meteor.y + meteor.height &&
-                bullet.y + bullet.height > meteor.y
-            ) {
-                bulletsRef.current.splice(bulletIndex, 1);
-                meteorsRef.current.splice(meteorIndex, 1);
-                setScore(prev => prev + 10);
-            }
-        });
-        
-        // Sword-meteor collision
-        if (weaponType === 'sword' && player.isSwinging) {
-            const swordTipX = player.x + player.width/3 + 30 * Math.sin(player.swingAngle);
-            const swordTipY = player.y - player.height/4 - 30 * Math.cos(player.swingAngle);
-            if (
-                swordTipX > meteor.x && swordTipX < meteor.x + meteor.width &&
-                swordTipY > meteor.y && swordTipY < meteor.y + meteor.height
-            ) {
-                 meteorsRef.current.splice(meteorIndex, 1);
-                 setScore(prev => prev + 10);
-            }
-        }
+      // Bullet-meteor collision
+      for (let i = bulletsRef.current.length - 1; i >= 0; i--) {
+        const bullet = bulletsRef.current[i];
+         if (
+              bullet.x < meteor.x + meteor.width &&
+              bullet.x + bullet.width > meteor.x &&
+              bullet.y < meteor.y + meteor.height &&
+              bullet.y + bullet.height > meteor.y
+          ) {
+              bulletsRef.current.splice(i, 1);
+              setScore(prev => prev + 10);
+              return false; // Remove meteor
+          }
+      }
+      
+      // Sword-meteor collision
+      if (weaponType === 'sword' && player.isSwinging) {
+          const swordTipX = player.x + player.width/3 + 40 * Math.sin(player.swingAngle);
+          const swordTipY = player.y - player.height/4 - 40 * Math.cos(player.swingAngle);
+          if (
+              swordTipX > meteor.x && swordTipX < meteor.x + meteor.width &&
+              swordTipY > meteor.y && swordTipY < meteor.y + meteor.height
+          ) {
+               setScore(prev => prev + 10);
+               return false; // Remove meteor
+          }
+      }
+
+      return true; // Keep meteor
     });
 
     // Draw everything
