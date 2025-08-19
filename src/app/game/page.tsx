@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Home, Loader2, Trophy, ArrowUp } from 'lucide-react';
+import { Home, Loader2, Trophy, ArrowUp, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -39,7 +39,7 @@ function GameContent() {
 
   // Player State
   const playerRef = useRef({ x: 100, y: 0, width: PLAYER_WIDTH, height: PLAYER_HEIGHT, vx: 0, vy: 0, health: 100, onGround: true });
-  const keysRef = useRef({ ArrowLeft: false, ArrowRight: false, ' ': false });
+  const keysRef = useRef({ ArrowLeft: false, ArrowRight: false, ' ': false, ArrowUp: false });
 
   // Enemies State
   const enemiesRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
@@ -127,6 +127,15 @@ function GameContent() {
     }
   };
 
+  const movePlayer = (direction: 'left' | 'right') => {
+    const player = playerRef.current;
+    if (direction === 'left') {
+      player.x -= PLAYER_SPEED;
+    } else {
+      player.x += PLAYER_SPEED;
+    }
+  };
+
   const gameLoop = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -138,9 +147,9 @@ function GameContent() {
     const player = playerRef.current;
     
     // Player movement
-    if (keysRef.current.ArrowLeft) player.x -= PLAYER_SPEED;
-    if (keysRef.current.ArrowRight) player.x += PLAYER_SPEED;
-    if (keysRef.current[' '] && player.onGround) {
+    if (keysRef.current.ArrowLeft) movePlayer('left');
+    if (keysRef.current.ArrowRight) movePlayer('right');
+    if ((keysRef.current[' '] || keysRef.current.ArrowUp) && player.onGround) {
         handleJump();
     }
     
@@ -301,8 +310,14 @@ function GameContent() {
         <>
           <canvas ref={canvasRef} className="bg-gray-200 rounded-md shadow-lg" />
           <div className="flex gap-4 mt-4">
+            <Button onMouseDown={() => keysRef.current.ArrowLeft = true} onMouseUp={() => keysRef.current.ArrowLeft = false} onMouseLeave={() => keysRef.current.ArrowLeft = false} className="p-4">
+              <ArrowLeft className="mr-2 h-4 w-4" /> Left
+            </Button>
             <Button onClick={handleJump} className="p-4">
               <ArrowUp className="mr-2 h-4 w-4" /> Jump
+            </Button>
+            <Button onMouseDown={() => keysRef.current.ArrowRight = true} onMouseUp={() => keysRef.current.ArrowRight = false} onMouseLeave={() => keysRef.current.ArrowRight = false} className="p-4">
+              Right <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
         </>
@@ -324,5 +339,3 @@ export default function GamePage() {
       </Suspense>
     );
   }
-
-    
