@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Home, Loader2, Trophy } from 'lucide-react';
+import { Home, Loader2, Trophy, ArrowUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -119,6 +119,14 @@ function GameContent() {
     ctx.fillText(`Score: ${score}`, ctx.canvas.width - 150, 30);
   };
   
+  const handleJump = () => {
+    const player = playerRef.current;
+    if (player.onGround) {
+        player.vy = -JUMP_VELOCITY;
+        player.onGround = false;
+    }
+  };
+
   const gameLoop = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -133,8 +141,7 @@ function GameContent() {
     if (keysRef.current.ArrowLeft) player.x -= PLAYER_SPEED;
     if (keysRef.current.ArrowRight) player.x += PLAYER_SPEED;
     if (keysRef.current[' '] && player.onGround) {
-        player.vy = -JUMP_VELOCITY;
-        player.onGround = false;
+        handleJump();
     }
     
     // Apply gravity
@@ -156,7 +163,7 @@ function GameContent() {
     enemySpawnTimerRef.current++;
     if (enemySpawnTimerRef.current > 120) { // Spawn every 2 seconds
         const y = canvas.height - 20 - ENEMY_HEIGHT;
-        const x = Math.random() < 0.5 ? -ENEMY_WIDTH : canvas.width;
+        const x = Math.random() < 0.5 ? 0 : canvas.width - ENEMY_WIDTH;
         enemiesRef.current.push({ x, y, width: ENEMY_WIDTH, height: ENEMY_HEIGHT });
         enemySpawnTimerRef.current = 0;
     }
@@ -290,11 +297,18 @@ function GameContent() {
   return (
     <main className="flex min-h-screen w-full flex-col items-center justify-center p-4 bg-gray-900 text-white">
       {!gameOver ? (
-        <canvas ref={canvasRef} className="bg-gray-200 rounded-md shadow-lg" />
+        <>
+          <canvas ref={canvasRef} className="bg-gray-200 rounded-md shadow-lg" />
+          <div className="flex gap-4 mt-4">
+            <Button onClick={handleJump} className="p-4">
+              <ArrowUp className="mr-2 h-4 w-4" /> Jump
+            </Button>
+          </div>
+        </>
       ) : (
         renderGameOver()
       )}
-      <Button variant="ghost" className="mt-8 text-white hover:text-gray-300" onClick={() => router.push('/')}>
+       <Button variant="ghost" className="mt-8 text-white hover:text-gray-300" onClick={() => router.push('/')}>
         <Home className="mr-2 h-4 w-4" />
         Return to Forge
       </Button>
@@ -309,5 +323,3 @@ export default function GamePage() {
       </Suspense>
     );
   }
-
-    
