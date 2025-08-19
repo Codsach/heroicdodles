@@ -23,7 +23,7 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
 
     const drawingStyle = {
       lineCap: 'round' as CanvasLineCap,
-      strokeStyle: '#0f172a',
+      strokeStyle: '#0f172a', // Use a visible color by default
       lineWidth: 5,
     };
 
@@ -73,6 +73,7 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
         clientX = event.touches[0].clientX;
         clientY = event.touches[0].clientY;
       } else {
+        // Should not happen, but as a fallback
         return { offsetX: 0, offsetY: 0 };
       }
 
@@ -86,6 +87,7 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
     }
 
     const startDrawing = (event: MouseEvent | TouchEvent) => {
+      event.preventDefault(); // Prevent default touch actions like scrolling
       const { offsetX, offsetY } = getEventPosition(event);
       if (contextRef.current) {
         contextRef.current.beginPath();
@@ -95,7 +97,8 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       }
     };
 
-    const finishDrawing = () => {
+    const finishDrawing = (event: MouseEvent | TouchEvent) => {
+      event.preventDefault();
       if (contextRef.current) {
         contextRef.current.closePath();
         setIsDrawing(false);
@@ -104,11 +107,13 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
 
     const draw = (event: MouseEvent | TouchEvent) => {
       if (!isDrawing || !contextRef.current) return;
+      event.preventDefault();
       const { offsetX, offsetY } = getEventPosition(event);
       contextRef.current.lineTo(offsetX, offsetY);
       contextRef.current.stroke();
     };
 
+    // Add event listeners
     canvas.addEventListener('mousedown', startDrawing);
     canvas.addEventListener('mouseup', finishDrawing);
     canvas.addEventListener('mousemove', draw);
@@ -129,7 +134,7 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       canvas.removeEventListener('touchcancel', finishDrawing);
       canvas.removeEventListener('touchmove', draw);
     };
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, [isDrawing]);
 
   useImperativeHandle(ref, () => ({
     clear() {
