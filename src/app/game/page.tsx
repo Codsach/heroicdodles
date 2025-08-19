@@ -14,7 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 const PLAYER_WIDTH = 50;
 const PLAYER_HEIGHT = 100;
 const PLAYER_SPEED = 5;
-const JUMP_VELOCITY = 18;
+const JUMP_VELOCITY = 22; // Increased jump height
 const GRAVITY = 0.8;
 const ENEMY_WIDTH = 40;
 const ENEMY_HEIGHT = 40;
@@ -175,12 +175,13 @@ function GameContent() {
         else enemy.x -= ENEMY_SPEED;
 
         // Player-Enemy collision
-        if (
+        const isColliding =
             player.x < enemy.x + enemy.width &&
             player.x + player.width > enemy.x &&
             player.y - player.height/2 < enemy.y + enemy.height &&
-            player.y + player.height/2 > enemy.y
-        ) {
+            player.y + player.height/2 > enemy.y;
+
+        if (isColliding && player.onGround) { // Only take damage if on the ground
             player.health -= 10;
             enemiesRef.current.splice(index, 1); // remove enemy on hit
             if (player.health <= 0) {
@@ -323,3 +324,5 @@ export default function GamePage() {
       </Suspense>
     );
   }
+
+    
