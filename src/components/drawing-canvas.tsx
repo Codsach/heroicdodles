@@ -20,6 +20,13 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
     const parent = canvas.parentElement;
     if (!parent) return;
 
+    // We need to keep the drawing style in a ref so we can re-apply it on resize
+    const drawingStyle = {
+      lineCap: 'round' as CanvasLineCap,
+      strokeStyle: '#0f172a', // dark slate color
+      lineWidth: 5,
+    };
+
     const resizeCanvas = () => {
       const { width } = parent.getBoundingClientRect();
       canvas.width = width;
@@ -27,9 +34,9 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       
       const context = canvas.getContext('2d');
       if (context) {
-        context.lineCap = 'round';
-        context.strokeStyle = '#0f172a'; // dark slate color
-        context.lineWidth = 5;
+        context.lineCap = drawingStyle.lineCap;
+        context.strokeStyle = drawingStyle.strokeStyle;
+        context.lineWidth = drawingStyle.lineWidth;
         contextRef.current = context;
       }
     };
