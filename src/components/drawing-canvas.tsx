@@ -62,7 +62,9 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
   }
 
   const startDrawing = (event: MouseEvent | TouchEvent) => {
-    event.preventDefault();
+    if (!(event instanceof MouseEvent)) {
+        event.preventDefault();
+    }
     const { offsetX, offsetY } = getEventPosition(event);
     contextRef.current?.beginPath();
     contextRef.current?.moveTo(offsetX, offsetY);
@@ -71,14 +73,18 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
   };
 
   const finishDrawing = (event: MouseEvent | TouchEvent) => {
-    event.preventDefault();
+    if (!(event instanceof MouseEvent)) {
+      event.preventDefault();
+    }
     contextRef.current?.closePath();
     setIsDrawing(false);
   };
 
   const draw = (event: MouseEvent | TouchEvent) => {
     if (!isDrawing) return;
-    event.preventDefault();
+    if (!(event instanceof MouseEvent)) {
+      event.preventDefault();
+    }
     const { offsetX, offsetY } = getEventPosition(event);
     contextRef.current?.lineTo(offsetX, offsetY);
     contextRef.current?.stroke();
