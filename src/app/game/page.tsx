@@ -204,59 +204,65 @@ function GameContent() {
     });
 
     // Update Meteors & check collisions
-    meteorsRef.current = meteorsRef.current.filter(meteor => {
-      meteor.y += METEOR_SPEED;
+    for (let i = meteorsRef.current.length - 1; i >= 0; i--) {
+        const meteor = meteorsRef.current[i];
+        meteor.y += METEOR_SPEED;
+        let meteorRemoved = false;
 
-      // Meteor-player collision
-      const isCollidingWithPlayer =
-          player.x < meteor.x + meteor.width &&
-          player.x + player.width > meteor.x &&
-          player.y - player.height/2 < meteor.y + meteor.height &&
-          player.y + player.height/2 > meteor.y;
-      
-      if (isCollidingWithPlayer) {
-          const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
-          player.health -= damage;
-          if (player.health <= 0) {
-              setGameOver(true);
-          }
-          return false; // Remove meteor
-      }
-      
-      if (meteor.y > canvas.height) {
-          return false; // Remove meteor
-      }
+        // Meteor-player collision
+        if (
+            player.x < meteor.x + meteor.width &&
+            player.x + player.width > meteor.x &&
+            player.y - player.height / 2 < meteor.y + meteor.height &&
+            player.y + player.height / 2 > meteor.y
+        ) {
+            const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
+            player.health -= damage;
+            if (player.health <= 0) {
+                setGameOver(true);
+            }
+            meteorsRef.current.splice(i, 1);
+            meteorRemoved = true;
+        }
 
-      // Bullet-meteor collision
-      for (let i = bulletsRef.current.length - 1; i >= 0; i--) {
-        const bullet = bulletsRef.current[i];
-         if (
-              bullet.x < meteor.x + meteor.width &&
-              bullet.x + bullet.width > meteor.x &&
-              bullet.y < meteor.y + meteor.height &&
-              bullet.y + bullet.height > meteor.y
-          ) {
-              bulletsRef.current.splice(i, 1);
-              setScore(prev => prev + 10);
-              return false; // Remove meteor
-          }
-      }
-      
-      // Sword-meteor collision
-      if (weaponType === 'sword' && player.isSwinging) {
-          const swordTipX = player.x + player.width/3 + 40 * Math.sin(player.swingAngle);
-          const swordTipY = player.y - player.height/4 - 40 * Math.cos(player.swingAngle);
-          if (
-              swordTipX > meteor.x && swordTipX < meteor.x + meteor.width &&
-              swordTipY > meteor.y && swordTipY < meteor.y + meteor.height
-          ) {
-               setScore(prev => prev + 10);
-               return false; // Remove meteor
-          }
-      }
+        if (!meteorRemoved && meteor.y > canvas.height) {
+            meteorsRef.current.splice(i, 1);
+            meteorRemoved = true;
+        }
 
-      return true; // Keep meteor
-    });
+        if (!meteorRemoved) {
+            // Bullet-meteor collision
+            for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
+                const bullet = bulletsRef.current[j];
+                if (
+                    bullet.x < meteor.x + meteor.width &&
+                    bullet.x + bullet.width > meteor.x &&
+                    bullet.y < meteor.y + meteor.height &&
+                    bullet.y + bullet.height > meteor.y
+                ) {
+                    bulletsRef.current.splice(j, 1);
+                    meteorsRef.current.splice(i, 1);
+                    setScore(prev => prev + 10);
+                    meteorRemoved = true;
+                    break; 
+                }
+            }
+        }
+      
+        if (!meteorRemoved && weaponType === 'sword' && player.isSwinging) {
+            const swordTipX = player.x + player.width/3 + 40 * Math.sin(player.swingAngle);
+            const swordTipY = player.y - player.height/4 - 40 * Math.cos(player.swingAngle);
+            if (
+                swordTipX > meteor.x && swordTipX < meteor.x + meteor.width &&
+                swordTipY > meteor.y && swordTipY < meteor.y + meteor.height
+            ) {
+                 setScore(prev => prev + 10);
+                 meteorsRef.current.splice(i, 1);
+                 meteorRemoved = true;
+            }
+        }
+    }
+
 
     // Draw everything
     drawPlayer(ctx, player);
@@ -369,18 +375,18 @@ function GameContent() {
       {!gameOver ? (
         <>
           <canvas ref={canvasRef} className="bg-gray-200 rounded-md shadow-lg" />
-          <div className="flex gap-4 mt-4">
-            <Button onMouseDown={() => keysRef.current.ArrowLeft = true} onMouseUp={() => keysRef.current.ArrowLeft = false} onMouseLeave={() => keysRef.current.ArrowLeft = false} className="p-4">
-              <ArrowLeft /> Left
-            </Button>
-            <Button onClick={handleAttack} className="p-4">
-                {weaponType === 'shield' ? <ShieldAlert /> : <Zap />}
-                {weaponType === 'shield' ? 'Brace' : 'Fire'}
-            </Button>
-            <Button onMouseDown={() => keysRef.current.ArrowRight = true} onMouseUp={() => keysRef.current.ArrowRight = false} onMouseLeave={() => keysRef.current.ArrowRight = false} className="p-4">
-              Right <ArrowRight />
-            </Button>
-          </div>
+           <div className="flex gap-4 mt-4">
+             <Button onMouseDown={() => keysRef.current.ArrowLeft = true} onMouseUp={() => keysRef.current.ArrowLeft = false} onMouseLeave={() => keysRef.current.ArrowLeft = false} className="p-4">
+               <ArrowLeft /> Left
+             </Button>
+             <Button onClick={handleAttack} className="p-4">
+                 {weaponType === 'shield' ? <ShieldAlert /> : <Zap />}
+                 {weaponType === 'gun' ? 'Fire' : 'Swing'}
+             </Button>
+             <Button onMouseDown={() => keysRef.current.ArrowRight = true} onMouseUp={() => keysRef.current.ArrowRight = false} onMouseLeave={() => keysRef.current.ArrowRight = false} className="p-4">
+               Right <ArrowRight />
+             </Button>
+           </div>
         </>
       ) : (
         renderGameOver()
@@ -400,5 +406,7 @@ export default function GamePage() {
       </Suspense>
     );
   }
+  
+    
 
     
