@@ -34,9 +34,6 @@ function GameContent() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameLoopRef = useRef<number>();
-
-  // Audio Refs
-  const audioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
   
   // Game State
   const [score, setScore] = useState(0);
@@ -54,28 +51,6 @@ function GameContent() {
   // Meteors State
   const meteorsRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
   const meteorSpawnTimerRef = useRef(0);
-
-  const playSound = (sound: string, loop = false) => {
-    const masterAudioElement = audioRefs.current[sound];
-    if (masterAudioElement) {
-        if (loop) {
-            masterAudioElement.loop = true;
-            masterAudioElement.play().catch(e => console.error(`Error playing looping sound ${sound}:`, e));
-        } else {
-            // Clone the audio element to allow for overlapping sounds
-            const soundInstance = masterAudioElement.cloneNode(true) as HTMLAudioElement;
-            soundInstance.play().catch(e => console.error(`Error playing sound ${sound}:`, e));
-        }
-    }
-  };
-
-  const stopSound = (sound: string) => {
-    const audioElement = audioRefs.current[sound];
-    if (audioElement) {
-      audioElement.pause();
-      audioElement.currentTime = 0;
-    }
-  }
 
   const drawPlayer = (ctx: CanvasRenderingContext2D, player: any) => {
     const headSize = 30;
@@ -179,7 +154,6 @@ function GameContent() {
     const player = playerRef.current;
     switch (weaponType) {
         case 'gun':
-            playSound('shoot');
             bulletsRef.current.push({
                 x: player.x + player.width / 2 + 15,
                 y: player.y - player.height / 2 + 10,
@@ -189,7 +163,6 @@ function GameContent() {
             break;
         case 'sword':
             if (!player.isSwinging) {
-                playSound('sword');
                 player.isSwinging = true;
                 player.swingAngle = -Math.PI / 2;
             }
@@ -261,13 +234,10 @@ function GameContent() {
         player.y - player.height / 2 < meteor.y + meteor.height &&
         player.y + player.height / 2 > meteor.y
       ) {
-        playSound('hit');
         const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
         player.health -= damage;
         if (player.health <= 0) {
           setGameOver(true);
-          playSound('gameover');
-          stopSound('music');
         }
         meteorsRef.current.splice(i, 1);
         meteorRemoved = true;
@@ -291,7 +261,6 @@ function GameContent() {
           bullet.y < meteor.y + meteor.height &&
           bullet.y + bullet.height > meteor.y
         ) {
-          playSound('explosion');
           bulletsRef.current.splice(j, 1);
           meteorsRef.current.splice(i, 1);
           setScore((prev) => prev + 10);
@@ -316,7 +285,6 @@ function GameContent() {
             Math.min(swordBaseY, swordTipY) < meteor.y + meteor.height &&
             Math.max(swordBaseY, swordTipY) > meteor.y
           ) {
-            playSound('explosion');
             setScore(prev => prev + 10);
             meteorsRef.current.splice(i, 1);
         }
@@ -336,14 +304,6 @@ function GameContent() {
   }, [gameOver, score, weaponType, handleAttack]);
 
   useEffect(() => {
-    // Initialize Audio
-    audioRefs.current.music = new Audio('/sounds/music.mp3');
-    audioRefs.current.shoot = new Audio('/sounds/shoot.wav');
-    audioRefs.current.sword = new Audio('/sounds/sword.wav');
-    audioRefs.current.explosion = new Audio('/sounds/explosion.wav');
-    audioRefs.current.hit = new Audio('/sounds/hit.wav');
-    audioRefs.current.gameover = new Audio('/sounds/gameover.wav');
-
     const canvas = canvasRef.current;
     if (canvas) {
         canvas.width = 1000;
@@ -369,7 +329,6 @@ function GameContent() {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     
-    playSound('music', true);
     gameLoopRef.current = requestAnimationFrame(gameLoop);
     
     return () => {
@@ -378,13 +337,6 @@ function GameContent() {
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current);
       }
-      // Stop all sounds on component unmount
-      Object.values(audioRefs.current).forEach(audio => {
-        if (audio) {
-            audio.pause();
-            audio.currentTime = 0;
-        }
-      });
     };
   }, [gameLoop]);
 
