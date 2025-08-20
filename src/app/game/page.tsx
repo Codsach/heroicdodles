@@ -53,35 +53,47 @@ function GameContent() {
   const meteorSpawnTimerRef = useRef(0);
 
   const drawPlayer = (ctx: CanvasRenderingContext2D, player: any) => {
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 3;
-    // Body
-    ctx.beginPath();
-    ctx.moveTo(player.x, player.y - player.height / 2); // neck
-    ctx.lineTo(player.x, player.y + player.height / 3); // torso
-    ctx.stroke();
-    // Legs
-    ctx.beginPath();
-    ctx.moveTo(player.x, player.y + player.height / 3);
-    ctx.lineTo(player.x - player.width / 4, player.y + player.height / 2);
-    ctx.moveTo(player.x, player.y + player.height / 3);
-    ctx.lineTo(player.x + player.width / 4, player.y + player.height / 2);
-    ctx.stroke();
-    // Arms
-    ctx.beginPath();
-    const armY = player.y - player.height / 4;
-    ctx.moveTo(player.x - player.width / 3, armY);
-    ctx.lineTo(player.x, armY);
-    ctx.lineTo(player.x + player.width / 3, armY);
-    ctx.stroke();
-    // Head
-    ctx.beginPath();
-    ctx.arc(player.x, player.y - player.height / 2 - 10, 10, 0, Math.PI * 2);
-    ctx.stroke();
+    const headSize = 30;
+    const bodyWidth = 40;
+    const bodyHeight = 50;
+    const armWidth = 15;
+    const armHeight = 40;
+    const legWidth = 18;
+    const legHeight = 30;
+
+    // Colors
+    const skinColor = '#E0C09A';
+    const armorColor = '#808080';
+    const pantsColor = '#4b3d2a';
     
+    const playerX = player.x - bodyWidth / 2;
+    const playerY = player.y - bodyHeight / 2 - headSize / 2;
+
+    // Legs
+    ctx.fillStyle = pantsColor;
+    ctx.fillRect(playerX, playerY + bodyHeight, legWidth, legHeight); // Left Leg
+    ctx.fillRect(playerX + bodyWidth - legWidth, playerY + bodyHeight, legWidth, legHeight); // Right Leg
+
+    // Body (Armor)
+    ctx.fillStyle = armorColor;
+    ctx.fillRect(playerX, playerY, bodyWidth, bodyHeight);
+
+    // Head
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(playerX + (bodyWidth - headSize) / 2, playerY - headSize, headSize, headSize);
+    
+    // Arms
+    ctx.fillStyle = skinColor;
+    const leftArmX = playerX - armWidth;
+    const rightArmX = playerX + bodyWidth;
+    const armY = playerY + 5;
+    
+    ctx.fillRect(leftArmX, armY, armWidth, armHeight); // Left Arm
+    ctx.fillRect(rightArmX, armY, armWidth, armHeight); // Right Arm
+
     // Draw Weapon
-    const weaponArmX = player.x + player.width / 3;
-    const weaponArmY = player.y - player.height / 4;
+    const weaponArmX = rightArmX; // Weapon on the right arm
+    const weaponArmY = armY + armHeight / 2;
     ctx.fillStyle = '#666';
     ctx.strokeStyle = '#333';
     
@@ -97,12 +109,16 @@ function GameContent() {
             ctx.restore();
             break;
         case 'gun':
-            ctx.fillRect(weaponArmX, weaponArmY - 5, 30, 10);
+            ctx.fillRect(weaponArmX + armWidth, weaponArmY - 5, 30, 10); // Barrel extends from arm
             break;
         case 'shield':
+             ctx.fillStyle = '#a5682a'
+             ctx.strokeStyle = '#693b0a'
+             ctx.lineWidth = 3;
+             const shieldX = leftArmX + armWidth / 2;
+             const shieldY = armY + armHeight/2;
              ctx.beginPath();
-             const shieldX = player.x - player.width / 3;
-             ctx.arc(shieldX, armY, 25, Math.PI * 1.5, Math.PI * 0.5);
+             ctx.rect(shieldX - 20, shieldY - 25, 40, 50);
              ctx.fill();
              ctx.stroke();
              break;
@@ -139,8 +155,8 @@ function GameContent() {
     switch (weaponType) {
         case 'gun':
             bulletsRef.current.push({
-                x: player.x + player.width / 3 + 30, // Start bullet at the gun barrel
-                y: player.y - player.height / 4,
+                x: player.x + PLAYER_WIDTH/2 + 15, // Adjusted for new character model
+                y: player.y - 15,
                 width: BULLET_WIDTH,
                 height: BULLET_HEIGHT
             });
@@ -211,10 +227,10 @@ function GameContent() {
 
         // Meteor-player collision
         if (
-            player.x < meteor.x + meteor.width &&
-            player.x + player.width > meteor.x &&
-            player.y - player.height / 2 < meteor.y + meteor.height &&
-            player.y + player.height / 2 > meteor.y
+            player.x - player.width/2 < meteor.x + meteor.width &&
+            player.x + player.width/2 > meteor.x &&
+            player.y - player.height/2 < meteor.y + meteor.height &&
+            player.y + player.height/2 > meteor.y
         ) {
             const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
             player.health -= damage;
@@ -225,40 +241,45 @@ function GameContent() {
             meteorRemoved = true;
         }
 
-        if (!meteorRemoved && meteor.y > canvas.height) {
-            meteorsRef.current.splice(i, 1);
-            meteorRemoved = true;
-        }
-
-        if (!meteorRemoved) {
-            // Bullet-meteor collision
-            for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
-                const bullet = bulletsRef.current[j];
-                if (
-                    bullet.x < meteor.x + meteor.width &&
-                    bullet.x + bullet.width > meteor.x &&
-                    bullet.y < meteor.y + meteor.height &&
-                    bullet.y + bullet.height > meteor.y
-                ) {
-                    bulletsRef.current.splice(j, 1);
-                    meteorsRef.current.splice(i, 1);
-                    setScore(prev => prev + 10);
-                    meteorRemoved = true;
-                    break; 
-                }
+        if (meteor.y > canvas.height) {
+            if (!meteorRemoved) {
+              meteorsRef.current.splice(i, 1);
+              meteorRemoved = true;
             }
         }
+        
+        if (meteorRemoved) continue;
+
+
+        // Bullet-meteor collision
+        for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
+            const bullet = bulletsRef.current[j];
+            if (
+                bullet.x < meteor.x + meteor.width &&
+                bullet.x + bullet.width > meteor.x &&
+                bullet.y < meteor.y + meteor.height &&
+                bullet.y + bullet.height > meteor.y
+            ) {
+                bulletsRef.current.splice(j, 1);
+                meteorsRef.current.splice(i, 1);
+                setScore(prev => prev + 10);
+                meteorRemoved = true;
+                break; 
+            }
+        }
+        
       
-        if (!meteorRemoved && weaponType === 'sword' && player.isSwinging) {
-            const swordTipX = player.x + player.width/3 + 40 * Math.sin(player.swingAngle);
-            const swordTipY = player.y - player.height/4 - 40 * Math.cos(player.swingAngle);
+        if (meteorRemoved) continue;
+
+        if (weaponType === 'sword' && player.isSwinging) {
+            const swordTipX = player.x + player.width/2 + 15 + 40 * Math.sin(player.swingAngle);
+            const swordTipY = player.y - 15 - 40 * Math.cos(player.swingAngle);
             if (
                 swordTipX > meteor.x && swordTipX < meteor.x + meteor.width &&
                 swordTipY > meteor.y && swordTipY < meteor.y + meteor.height
             ) {
                  setScore(prev => prev + 10);
                  meteorsRef.current.splice(i, 1);
-                 meteorRemoved = true;
             }
         }
     }
@@ -280,8 +301,7 @@ function GameContent() {
     if (canvas) {
         canvas.width = 1000;
         canvas.height = 500;
-        const groundY = canvas.height - 20;
-        playerRef.current.y = groundY - playerRef.current.height / 2;
+        playerRef.current.y = canvas.height - playerRef.current.height / 2 - 20;
         playerRef.current.x = canvas.width / 2;
     }
 
@@ -379,7 +399,7 @@ function GameContent() {
              <Button onMouseDown={() => keysRef.current.ArrowLeft = true} onMouseUp={() => keysRef.current.ArrowLeft = false} onMouseLeave={() => keysRef.current.ArrowLeft = false} className="p-4">
                <ArrowLeft /> Left
              </Button>
-             <Button onClick={handleAttack} className="p-4">
+             <Button onClick={() => keysRef.current[' '] = true} className="p-4">
                  {weaponType === 'shield' ? <ShieldAlert /> : <Zap />}
                  {weaponType === 'gun' ? 'Fire' : 'Swing'}
              </Button>
