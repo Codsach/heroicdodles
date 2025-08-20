@@ -34,6 +34,9 @@ function GameContent() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameLoopRef = useRef<number>();
+
+  // Audio Refs
+  const audioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
   
   // Game State
   const [score, setScore] = useState(0);
@@ -51,6 +54,23 @@ function GameContent() {
   // Meteors State
   const meteorsRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
   const meteorSpawnTimerRef = useRef(0);
+
+  const playSound = (sound: string, loop = false) => {
+    const audioElement = audioRefs.current[sound];
+    if (audioElement) {
+      audioElement.currentTime = 0;
+      audioElement.loop = loop;
+      audioElement.play().catch(e => console.error(`Error playing sound ${sound}:`, e));
+    }
+  };
+
+  const stopSound = (sound: string) => {
+    const audioElement = audioRefs.current[sound];
+    if (audioElement) {
+      audioElement.pause();
+      audioElement.currentTime = 0;
+    }
+  }
 
   const drawPlayer = (ctx: CanvasRenderingContext2D, player: any) => {
     const headSize = 30;
@@ -109,7 +129,7 @@ function GameContent() {
             ctx.restore();
             break;
         case 'gun':
-            ctx.fillRect(weaponArmX + armWidth, weaponArmY - 5, 30, 10); // Barrel extends from arm
+            ctx.fillRect(weaponArmX + 5, weaponArmY - 5, 30, 10);
             break;
         case 'shield':
              ctx.fillStyle = '#a5682a'
@@ -154,15 +174,17 @@ function GameContent() {
     const player = playerRef.current;
     switch (weaponType) {
         case 'gun':
+            playSound('shoot');
             bulletsRef.current.push({
-                x: player.x + PLAYER_WIDTH/2 + 15, // Adjusted for new character model
-                y: player.y - 15,
+                x: player.x + player.width / 2,
+                y: player.y - player.height / 2,
                 width: BULLET_WIDTH,
                 height: BULLET_HEIGHT
             });
             break;
         case 'sword':
             if (!player.isSwinging) {
+                playSound('sword');
                 player.isSwinging = true;
                 player.swingAngle = -Math.PI / 2;
             }
@@ -221,67 +243,79 @@ function GameContent() {
 
     // Update Meteors & check collisions
     for (let i = meteorsRef.current.length - 1; i >= 0; i--) {
-        const meteor = meteorsRef.current[i];
-        meteor.y += METEOR_SPEED;
-        let meteorRemoved = false;
+      const meteor = meteorsRef.current[i];
+      if (!meteor) continue;
 
-        // Meteor-player collision
-        if (
-            player.x - player.width/2 < meteor.x + meteor.width &&
-            player.x + player.width/2 > meteor.x &&
-            player.y - player.height/2 < meteor.y + meteor.height &&
-            player.y + player.height/2 > meteor.y
-        ) {
-            const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
-            player.health -= damage;
-            if (player.health <= 0) {
-                setGameOver(true);
-            }
-            meteorsRef.current.splice(i, 1);
-            meteorRemoved = true;
+      meteor.y += METEOR_SPEED;
+      let meteorRemoved = false;
+
+      // Meteor-player collision
+      if (
+        player.x - player.width / 2 < meteor.x + meteor.width &&
+        player.x + player.width / 2 > meteor.x &&
+        player.y - player.height / 2 < meteor.y + meteor.height &&
+        player.y + player.height / 2 > meteor.y
+      ) {
+        playSound('hit');
+        const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
+        player.health -= damage;
+        if (player.health <= 0) {
+          setGameOver(true);
+          playSound('gameover');
+          stopSound('music');
         }
+        meteorsRef.current.splice(i, 1);
+        meteorRemoved = true;
+      }
 
-        if (meteor.y > canvas.height) {
-            if (!meteorRemoved) {
-              meteorsRef.current.splice(i, 1);
-              meteorRemoved = true;
-            }
+      if (meteor.y > canvas.height) {
+        if (!meteorRemoved) {
+          meteorsRef.current.splice(i, 1);
         }
-        
-        if (meteorRemoved) continue;
-
-
-        // Bullet-meteor collision
-        for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
-            const bullet = bulletsRef.current[j];
-            if (
-                bullet.x < meteor.x + meteor.width &&
-                bullet.x + bullet.width > meteor.x &&
-                bullet.y < meteor.y + meteor.height &&
-                bullet.y + bullet.height > meteor.y
-            ) {
-                bulletsRef.current.splice(j, 1);
-                meteorsRef.current.splice(i, 1);
-                setScore(prev => prev + 10);
-                meteorRemoved = true;
-                break; 
-            }
-        }
-        
+        continue;
+      }
       
-        if (meteorRemoved) continue;
+      if (meteorRemoved) continue;
 
-        if (weaponType === 'sword' && player.isSwinging) {
-            const swordTipX = player.x + player.width/2 + 15 + 40 * Math.sin(player.swingAngle);
-            const swordTipY = player.y - 15 - 40 * Math.cos(player.swingAngle);
-            if (
-                swordTipX > meteor.x && swordTipX < meteor.x + meteor.width &&
-                swordTipY > meteor.y && swordTipY < meteor.y + meteor.height
-            ) {
-                 setScore(prev => prev + 10);
-                 meteorsRef.current.splice(i, 1);
-            }
+      // Bullet-meteor collision
+      for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
+        const bullet = bulletsRef.current[j];
+        if (
+          bullet.x < meteor.x + meteor.width &&
+          bullet.x + bullet.width > meteor.x &&
+          bullet.y < meteor.y + meteor.height &&
+          bullet.y + bullet.height > meteor.y
+        ) {
+          playSound('explosion');
+          bulletsRef.current.splice(j, 1);
+          meteorsRef.current.splice(i, 1);
+          setScore((prev) => prev + 10);
+          meteorRemoved = true;
+          break;
         }
+      }
+      
+      if (meteorRemoved) continue;
+
+      // Sword-meteor collision
+      if (weaponType === 'sword' && player.isSwinging) {
+        const swordTipX = player.x + player.width/2 + 15 + 40 * Math.sin(player.swingAngle);
+        const swordTipY = player.y - 15 - 40 * Math.cos(player.swingAngle);
+        const swordBaseX = player.x + player.width/2 + 15;
+        const swordBaseY = player.y - 15;
+
+        // A simple line-box collision for the sword
+        if (
+            Math.min(swordBaseX, swordTipX) < meteor.x + meteor.width &&
+            Math.max(swordBaseX, swordTipX) > meteor.x &&
+            Math.min(swordBaseY, swordTipY) < meteor.y + meteor.height &&
+            Math.max(swordBaseY, swordTipY) > meteor.y
+          ) {
+            playSound('explosion');
+            setScore(prev => prev + 10);
+            meteorsRef.current.splice(i, 1);
+        }
+      }
     }
 
 
@@ -297,6 +331,14 @@ function GameContent() {
   }, [gameOver, score, weaponType, handleAttack]);
 
   useEffect(() => {
+    // Initialize Audio
+    audioRefs.current.music = new Audio('/sounds/music.mp3');
+    audioRefs.current.shoot = new Audio('/sounds/shoot.wav');
+    audioRefs.current.sword = new Audio('/sounds/sword.wav');
+    audioRefs.current.explosion = new Audio('/sounds/explosion.wav');
+    audioRefs.current.hit = new Audio('/sounds/hit.wav');
+    audioRefs.current.gameover = new Audio('/sounds/gameover.wav');
+
     const canvas = canvasRef.current;
     if (canvas) {
         canvas.width = 1000;
@@ -306,6 +348,9 @@ function GameContent() {
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+      }
       if (e.key in keysRef.current && !e.repeat) {
           keysRef.current[e.key as keyof typeof keysRef.current] = true;
       }
@@ -319,6 +364,7 @@ function GameContent() {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     
+    playSound('music', true);
     gameLoopRef.current = requestAnimationFrame(gameLoop);
     
     return () => {
@@ -327,6 +373,13 @@ function GameContent() {
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current);
       }
+      // Stop all sounds on component unmount
+      Object.values(audioRefs.current).forEach(audio => {
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+      });
     };
   }, [gameLoop]);
 
@@ -366,7 +419,7 @@ function GameContent() {
   };
 
   const renderGameOver = () => (
-    <Card className="w-full max-w-lg text-center shadow-lg">
+    <Card className="w-full max-w-lg text-center shadow-lg bg-card text-card-foreground">
         <CardHeader>
             <CardTitle className="text-4xl font-headline">Game Over</CardTitle>
             <CardDescription>You fought bravely! Your final score is {score}.</CardDescription>
@@ -377,7 +430,7 @@ function GameContent() {
                 placeholder="Enter your name"
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded text-black"
              />
              <Button onClick={handleSaveScore} className="w-full" disabled={isSaving}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trophy className="mr-2 h-4 w-4" />}
@@ -399,9 +452,9 @@ function GameContent() {
              <Button onMouseDown={() => keysRef.current.ArrowLeft = true} onMouseUp={() => keysRef.current.ArrowLeft = false} onMouseLeave={() => keysRef.current.ArrowLeft = false} className="p-4">
                <ArrowLeft /> Left
              </Button>
-             <Button onClick={() => keysRef.current[' '] = true} className="p-4">
+             <Button onMouseDown={() => (keysRef.current[' '] = true)} onMouseUp={() => (keysRef.current[' '] = false)} className="p-4">
                  {weaponType === 'shield' ? <ShieldAlert /> : <Zap />}
-                 {weaponType === 'gun' ? 'Fire' : 'Swing'}
+                 {weaponType === 'gun' ? 'Fire' : weaponType === 'sword' ? 'Swing' : 'Block'}
              </Button>
              <Button onMouseDown={() => keysRef.current.ArrowRight = true} onMouseUp={() => keysRef.current.ArrowRight = false} onMouseLeave={() => keysRef.current.ArrowRight = false} className="p-4">
                Right <ArrowRight />
@@ -427,6 +480,4 @@ export default function GamePage() {
     );
   }
   
-    
-
     
