@@ -98,6 +98,7 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
     };
 
     const startDrawing = (event: MouseEvent | TouchEvent) => {
+      event.preventDefault();
       const { offsetX, offsetY } = getEventPosition(event);
       if (contextRef.current) {
         contextRef.current.beginPath();
@@ -107,16 +108,18 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
       }
     };
 
-    const finishDrawing = () => {
-        if (contextRef.current && isDrawing) {
-            contextRef.current.closePath();
-            setIsDrawing(false);
-        }
+    const finishDrawing = (event: MouseEvent | TouchEvent) => {
+      event.preventDefault();
+      if (contextRef.current && isDrawing) {
+          contextRef.current.closePath();
+          setIsDrawing(false);
+      }
     };
     
 
     const draw = (event: MouseEvent | TouchEvent) => {
       if (!isDrawing || !contextRef.current) return;
+      event.preventDefault();
       const { offsetX, offsetY } = getEventPosition(event);
       contextRef.current.lineTo(offsetX, offsetY);
       contextRef.current.stroke();
@@ -127,10 +130,10 @@ const DrawingCanvas = forwardRef((props, ref: Ref<DrawingCanvasRef>) => {
     canvas.addEventListener('mouseup', finishDrawing);
     canvas.addEventListener('mousemove', draw);
     canvas.addEventListener('mouseleave', finishDrawing);
-    canvas.addEventListener('touchstart', startDrawing);
-    canvas.addEventListener('touchend', finishDrawing);
-    canvas.addEventListener('touchcancel', finishDrawing);
-    canvas.addEventListener('touchmove', draw);
+    canvas.addEventListener('touchstart', startDrawing, { passive: false });
+    canvas.addEventListener('touchend', finishDrawing, { passive: false });
+    canvas.addEventListener('touchcancel', finishDrawing, { passive: false });
+    canvas.addEventListener('touchmove', draw, { passive: false });
 
     // Cleanup listeners.
     return () => {
