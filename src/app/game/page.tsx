@@ -51,7 +51,7 @@ function GameContent() {
   const meteorsRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
   const meteorSpawnTimerRef = useRef(0);
 
-    const drawPlayer = (ctx: CanvasRenderingContext2D, player: any) => {
+  const drawPlayer = (ctx: CanvasRenderingContext2D, player: any) => {
     const headSize = 30;
     const bodyWidth = 40;
     const bodyHeight = 50;
@@ -102,10 +102,12 @@ function GameContent() {
                 ctx.save();
                 ctx.strokeStyle = 'blue';
                 ctx.lineWidth = 5;
+                const slashCenterX = player.x + 30;
+                const slashCenterY = player.y - player.height / 2;
                 const startAngle = -Math.PI * 0.7;
                 const endAngle = startAngle + (Math.PI * 0.9 * player.slashProgress);
                 ctx.beginPath();
-                ctx.arc(player.x, player.y - player.height / 2, 60, startAngle, endAngle);
+                ctx.arc(slashCenterX, slashCenterY, 60, startAngle, endAngle);
                 ctx.stroke();
                 ctx.restore();
             } else {
@@ -162,9 +164,11 @@ function GameContent() {
     const player = playerRef.current;
     switch (weaponType) {
         case 'gun':
+            const weaponArmX = player.x + 20;
+            const weaponArmY = player.y - player.height / 2 + 30;
             bulletsRef.current.push({
-                x: player.x + player.width / 2 - 2.5,
-                y: player.y - player.height,
+                x: weaponArmX + 30, // fire from the tip of the gun
+                y: weaponArmY - 5,
                 width: BULLET_WIDTH,
                 height: BULLET_HEIGHT
             });
@@ -228,89 +232,80 @@ function GameContent() {
     });
 
     // Update Meteors & check collisions
-    for (let i = meteorsRef.current.length - 1; i >= 0; i--) {
-      const meteor = meteorsRef.current[i];
-      if (!meteor) continue;
+    const newMeteors = [];
+    for (const meteor of meteorsRef.current) {
+        meteor.y += METEOR_SPEED;
+        let meteorRemoved = false;
 
-      meteor.y += METEOR_SPEED;
-      let meteorRemoved = false;
-
-      // Meteor-player collision
-      if (
-        player.x - player.width / 2 < meteor.x + meteor.width &&
-        player.x + player.width / 2 > meteor.x &&
-        player.y - player.height / 2 < meteor.y + meteor.height &&
-        player.y + player.height / 2 > meteor.y
-      ) {
-        player.health -= 10;
-        if (player.health <= 0) {
-          setGameOver(true);
-        }
-        meteorsRef.current.splice(i, 1);
-        meteorRemoved = true;
-      }
-      
-      if (meteor.y > canvas.height) {
-        if (!meteorRemoved) {
-          meteorsRef.current.splice(i, 1);
-        }
-        continue;
-      }
-      
-      if (meteorRemoved) continue;
-
-      // Bullet-meteor collision
-      for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
-        const bullet = bulletsRef.current[j];
+        // Meteor-player collision
         if (
-          bullet.x < meteor.x + meteor.width &&
-          bullet.x + bullet.width > meteor.x &&
-          bullet.y < meteor.y + meteor.height &&
-          bullet.y + bullet.height > meteor.y
+            !gameOver &&
+            player.x - player.width / 2 < meteor.x + meteor.width &&
+            player.x + player.width / 2 > meteor.x &&
+            player.y - player.height / 2 < meteor.y + meteor.height &&
+            player.y + player.height / 2 > meteor.y
         ) {
-          bulletsRef.current.splice(j, 1);
-          meteorsRef.current.splice(i, 1);
-          setScore((prev) => prev + 10);
-          meteorRemoved = true;
-          break;
-        }
-      }
-      
-      if (meteorRemoved) continue;
-
-      // Sword-meteor collision
-      if (weaponType === 'sword' && player.isSlashing) {
-          // simple radial collision check for the slash
-          const distance = Math.sqrt(Math.pow(meteor.x - player.x, 2) + Math.pow(meteor.y - (player.y - player.height/2), 2));
-          if(distance > 30 && distance < 70) { // rough range of the slash
-              meteorsRef.current.splice(i, 1);
-              setScore(prev => prev + 10);
-              meteorRemoved = true;
-          }
-      }
-
-      if (meteorRemoved) continue;
-
-      // Shield-meteor collision
-      if (weaponType === 'shield') {
-          const shieldHitbox = {
-              x: player.x - player.width/2 - 35,
-              y: player.y - player.height/2,
-              width: 40,
-              height: 50
-          };
-           if (
-            meteor.x < shieldHitbox.x + shieldHitbox.width &&
-            meteor.x + meteor.width > shieldHitbox.x &&
-            meteor.y < shieldHitbox.y + shieldHitbox.height &&
-            meteor.y + meteor.height > shieldHitbox.y
-          ) {
-            meteorsRef.current.splice(i, 1);
-            setScore((prev) => prev + 5); // Lower score for just blocking
+            player.health -= 10;
             meteorRemoved = true;
-          }
-      }
+            if (player.health <= 0) {
+                setGameOver(true);
+            }
+        }
+
+        // Bullet-meteor collision
+        if (!meteorRemoved) {
+            for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
+                const bullet = bulletsRef.current[j];
+                if (
+                    bullet.x < meteor.x + meteor.width &&
+                    bullet.x + bullet.width > meteor.x &&
+                    bullet.y < meteor.y + meteor.height &&
+                    bullet.y + bullet.height > meteor.y
+                ) {
+                    bulletsRef.current.splice(j, 1);
+                    setScore((prev) => prev + 10);
+                    meteorRemoved = true;
+                    break;
+                }
+            }
+        }
+
+        // Sword-meteor collision
+        if (!meteorRemoved && weaponType === 'sword' && player.isSlashing) {
+            const slashCenterX = player.x + 30;
+            const slashCenterY = player.y - player.height / 2;
+            const distance = Math.sqrt(Math.pow(meteor.x - slashCenterX, 2) + Math.pow(meteor.y - slashCenterY, 2));
+            if (distance > 30 && distance < 70) { // rough range of the slash
+                setScore(prev => prev + 10);
+                meteorRemoved = true;
+            }
+        }
+
+        // Shield-meteor collision
+        if (!meteorRemoved && weaponType === 'shield') {
+            const shieldHitbox = {
+                x: player.x - player.width/2 - 35,
+                y: player.y - player.height/2,
+                width: 40,
+                height: 50
+            };
+            if (
+                meteor.x < shieldHitbox.x + shieldHitbox.width &&
+                meteor.x + meteor.width > shieldHitbox.x &&
+                meteor.y < shieldHitbox.y + shieldHitbox.height &&
+                meteor.y + meteor.height > shieldHitbox.y
+            ) {
+                setScore((prev) => prev + 5); // Lower score for just blocking
+                meteorRemoved = true;
+            }
+        }
+
+        // Keep meteor if it's not removed and on screen
+        if (!meteorRemoved && meteor.y < canvas.height) {
+            newMeteors.push(meteor);
+        }
     }
+    meteorsRef.current = newMeteors;
 
 
     // Draw everything
@@ -465,6 +460,6 @@ export default function GamePage() {
       </Suspense>
     );
   }
-  
+    
     
     
