@@ -56,11 +56,16 @@ function GameContent() {
   const meteorSpawnTimerRef = useRef(0);
 
   const playSound = (sound: string, loop = false) => {
-    const audioElement = audioRefs.current[sound];
-    if (audioElement) {
-      audioElement.currentTime = 0;
-      audioElement.loop = loop;
-      audioElement.play().catch(e => console.error(`Error playing sound ${sound}:`, e));
+    const masterAudioElement = audioRefs.current[sound];
+    if (masterAudioElement) {
+        if (loop) {
+            masterAudioElement.loop = true;
+            masterAudioElement.play().catch(e => console.error(`Error playing looping sound ${sound}:`, e));
+        } else {
+            // Clone the audio element to allow for overlapping sounds
+            const soundInstance = masterAudioElement.cloneNode(true) as HTMLAudioElement;
+            soundInstance.play().catch(e => console.error(`Error playing sound ${sound}:`, e));
+        }
     }
   };
 
@@ -129,7 +134,7 @@ function GameContent() {
             ctx.restore();
             break;
         case 'gun':
-            ctx.fillRect(weaponArmX + 5, weaponArmY - 5, 30, 10);
+            ctx.fillRect(weaponArmX, weaponArmY - 5, 30, 10);
             break;
         case 'shield':
              ctx.fillStyle = '#a5682a'
@@ -176,8 +181,8 @@ function GameContent() {
         case 'gun':
             playSound('shoot');
             bulletsRef.current.push({
-                x: player.x + player.width / 2,
-                y: player.y - player.height / 2,
+                x: player.x + player.width / 2 + 15,
+                y: player.y - player.height / 2 + 10,
                 width: BULLET_WIDTH,
                 height: BULLET_HEIGHT
             });
@@ -480,4 +485,5 @@ export default function GamePage() {
     );
   }
   
+    
     
