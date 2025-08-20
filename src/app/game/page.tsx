@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Home, Loader2, Trophy, ArrowLeft, ArrowRight, ShieldAlert, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -232,11 +232,11 @@ function GameContent() {
     });
 
     // Update Meteors & check collisions
-    const newMeteors = [];
-    for (const meteor of meteorsRef.current) {
+    for (let i = meteorsRef.current.length - 1; i >= 0; i--) {
+        const meteor = meteorsRef.current[i];
         meteor.y += METEOR_SPEED;
         let meteorRemoved = false;
-
+        
         // Meteor-player collision
         if (
             !gameOver &&
@@ -246,6 +246,7 @@ function GameContent() {
             player.y + player.height / 2 > meteor.y
         ) {
             player.health -= 10;
+            meteorsRef.current.splice(i, 1);
             meteorRemoved = true;
             if (player.health <= 0) {
                 setGameOver(true);
@@ -263,6 +264,7 @@ function GameContent() {
                     bullet.y + bullet.height > meteor.y
                 ) {
                     bulletsRef.current.splice(j, 1);
+                    meteorsRef.current.splice(i, 1);
                     setScore((prev) => prev + 10);
                     meteorRemoved = true;
                     break;
@@ -276,6 +278,7 @@ function GameContent() {
             const slashCenterY = player.y - player.height / 2;
             const distance = Math.sqrt(Math.pow(meteor.x - slashCenterX, 2) + Math.pow(meteor.y - slashCenterY, 2));
             if (distance > 30 && distance < 70) { // rough range of the slash
+                meteorsRef.current.splice(i, 1);
                 setScore(prev => prev + 10);
                 meteorRemoved = true;
             }
@@ -295,17 +298,17 @@ function GameContent() {
                 meteor.y < shieldHitbox.y + shieldHitbox.height &&
                 meteor.y + meteor.height > shieldHitbox.y
             ) {
+                meteorsRef.current.splice(i, 1);
                 setScore((prev) => prev + 5); // Lower score for just blocking
                 meteorRemoved = true;
             }
         }
 
-        // Keep meteor if it's not removed and on screen
-        if (!meteorRemoved && meteor.y < canvas.height) {
-            newMeteors.push(meteor);
+        // Remove meteor if it's off screen
+        if (!meteorRemoved && meteor.y > canvas.height) {
+            meteorsRef.current.splice(i, 1);
         }
     }
-    meteorsRef.current = newMeteors;
 
 
     // Draw everything
