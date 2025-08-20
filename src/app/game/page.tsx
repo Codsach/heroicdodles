@@ -14,7 +14,6 @@ import { v4 as uuidv4 } from 'uuid';
 const PLAYER_WIDTH = 50;
 const PLAYER_HEIGHT = 100;
 const PLAYER_SPEED = 7;
-const SHIELD_DAMAGE_REDUCTION = 0.5;
 
 const METEOR_WIDTH = 20;
 const METEOR_HEIGHT = 20;
@@ -42,7 +41,7 @@ function GameContent() {
   const [isSaving, setIsSaving] = useState(false);
 
   // Player State
-  const playerRef = useRef({ x: 100, y: 0, width: PLAYER_WIDTH, height: PLAYER_HEIGHT, health: 100, isSwinging: false, swingAngle: 0 });
+  const playerRef = useRef({ x: 100, y: 0, width: PLAYER_WIDTH, height: PLAYER_HEIGHT, health: 100, isSlashing: false, slashProgress: 0 });
   const keysRef = useRef({ ArrowLeft: false, ArrowRight: false, ' ': false });
   
   // Bullets State
@@ -52,7 +51,7 @@ function GameContent() {
   const meteorsRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
   const meteorSpawnTimerRef = useRef(0);
 
-  const drawPlayer = (ctx: CanvasRenderingContext2D, player: any) => {
+    const drawPlayer = (ctx: CanvasRenderingContext2D, player: any) => {
     const headSize = 30;
     const bodyWidth = 40;
     const bodyHeight = 50;
@@ -92,31 +91,40 @@ function GameContent() {
     ctx.fillRect(rightArmX, armY, armWidth, armHeight); // Right Arm
 
     // Draw Weapon
-    const weaponArmX = rightArmX; // Weapon on the right arm
+    const weaponArmX = rightArmX; 
     const weaponArmY = armY + armHeight / 2;
     ctx.fillStyle = '#666';
     ctx.strokeStyle = '#333';
     
     switch (weaponType) {
         case 'sword':
-            ctx.save();
-            ctx.translate(weaponArmX, weaponArmY);
-            if (player.isSwinging) {
-              ctx.rotate(player.swingAngle);
+             if (player.isSlashing) {
+                ctx.save();
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 5;
+                const startAngle = -Math.PI * 0.7;
+                const endAngle = startAngle + (Math.PI * 0.9 * player.slashProgress);
+                ctx.beginPath();
+                ctx.arc(player.x, player.y - player.height / 2, 60, startAngle, endAngle);
+                ctx.stroke();
+                ctx.restore();
+            } else {
+                ctx.save();
+                ctx.translate(weaponArmX, weaponArmY);
+                ctx.fillRect(0, -40, 5, 40); // blade
+                ctx.fillRect(-5, 0, 15, 5); // hilt
+                ctx.restore();
             }
-            ctx.fillRect(0, -40, 5, 40); // blade
-            ctx.fillRect(-5, 0, 15, 5); // hilt
-            ctx.restore();
             break;
         case 'gun':
             ctx.fillRect(weaponArmX, weaponArmY - 5, 30, 10);
             break;
         case 'shield':
-             ctx.fillStyle = '#a5682a'
-             ctx.strokeStyle = '#693b0a'
+             ctx.fillStyle = '#c0c0c0' // silver
+             ctx.strokeStyle = '#808080'
              ctx.lineWidth = 3;
-             const shieldX = leftArmX + armWidth / 2;
-             const shieldY = armY + armHeight/2;
+             const shieldX = leftArmX - 10;
+             const shieldY = armY;
              ctx.beginPath();
              ctx.rect(shieldX - 20, shieldY - 25, 40, 50);
              ctx.fill();
@@ -155,20 +163,20 @@ function GameContent() {
     switch (weaponType) {
         case 'gun':
             bulletsRef.current.push({
-                x: player.x + player.width / 2 + 15,
-                y: player.y - player.height / 2 + 10,
+                x: player.x + player.width / 2 - 2.5,
+                y: player.y - player.height,
                 width: BULLET_WIDTH,
                 height: BULLET_HEIGHT
             });
             break;
         case 'sword':
-            if (!player.isSwinging) {
-                player.isSwinging = true;
-                player.swingAngle = -Math.PI / 2;
+            if (!player.isSlashing) {
+                player.isSlashing = true;
+                player.slashProgress = 0;
             }
             break;
         case 'shield':
-            // Shield is passive
+            // Shield is passive, no action on attack button
             break;
     }
   }, [weaponType]);
@@ -196,12 +204,12 @@ function GameContent() {
     if (player.x - player.width/2 < 0) player.x = player.width/2;
     if (player.x + player.width/2 > canvas.width) player.x = canvas.width - player.width/2;
 
-    // Update sword swing
-    if (player.isSwinging) {
-        player.swingAngle += Math.PI / 10;
-        if (player.swingAngle >= Math.PI / 4) {
-            player.isSwinging = false;
-            player.swingAngle = 0;
+    // Update sword slash
+    if (player.isSlashing) {
+        player.slashProgress += 0.1; // Animation speed
+        if (player.slashProgress >= 1) {
+            player.isSlashing = false;
+            player.slashProgress = 0;
         }
     }
 
@@ -234,15 +242,14 @@ function GameContent() {
         player.y - player.height / 2 < meteor.y + meteor.height &&
         player.y + player.height / 2 > meteor.y
       ) {
-        const damage = weaponType === 'shield' ? 10 * SHIELD_DAMAGE_REDUCTION : 10;
-        player.health -= damage;
+        player.health -= 10;
         if (player.health <= 0) {
           setGameOver(true);
         }
         meteorsRef.current.splice(i, 1);
         meteorRemoved = true;
       }
-
+      
       if (meteor.y > canvas.height) {
         if (!meteorRemoved) {
           meteorsRef.current.splice(i, 1);
@@ -272,29 +279,43 @@ function GameContent() {
       if (meteorRemoved) continue;
 
       // Sword-meteor collision
-      if (weaponType === 'sword' && player.isSwinging) {
-        const swordTipX = player.x + player.width/2 + 15 + 40 * Math.sin(player.swingAngle);
-        const swordTipY = player.y - 15 - 40 * Math.cos(player.swingAngle);
-        const swordBaseX = player.x + player.width/2 + 15;
-        const swordBaseY = player.y - 15;
+      if (weaponType === 'sword' && player.isSlashing) {
+          // simple radial collision check for the slash
+          const distance = Math.sqrt(Math.pow(meteor.x - player.x, 2) + Math.pow(meteor.y - (player.y - player.height/2), 2));
+          if(distance > 30 && distance < 70) { // rough range of the slash
+              meteorsRef.current.splice(i, 1);
+              setScore(prev => prev + 10);
+              meteorRemoved = true;
+          }
+      }
 
-        // A simple line-box collision for the sword
-        if (
-            Math.min(swordBaseX, swordTipX) < meteor.x + meteor.width &&
-            Math.max(swordBaseX, swordTipX) > meteor.x &&
-            Math.min(swordBaseY, swordTipY) < meteor.y + meteor.height &&
-            Math.max(swordBaseY, swordTipY) > meteor.y
+      if (meteorRemoved) continue;
+
+      // Shield-meteor collision
+      if (weaponType === 'shield') {
+          const shieldHitbox = {
+              x: player.x - player.width/2 - 35,
+              y: player.y - player.height/2,
+              width: 40,
+              height: 50
+          };
+           if (
+            meteor.x < shieldHitbox.x + shieldHitbox.width &&
+            meteor.x + meteor.width > shieldHitbox.x &&
+            meteor.y < shieldHitbox.y + shieldHitbox.height &&
+            meteor.y + meteor.height > shieldHitbox.y
           ) {
-            setScore(prev => prev + 10);
             meteorsRef.current.splice(i, 1);
-        }
+            setScore((prev) => prev + 5); // Lower score for just blocking
+            meteorRemoved = true;
+          }
       }
     }
 
 
     // Draw everything
     drawPlayer(ctx, player);
-    drawProjectiles(ctx, bulletsRef.current, 'blue');
+    drawProjectiles(ctx, bulletsRef.current, 'yellow');
     drawProjectiles(ctx, meteorsRef.current, 'orange');
     drawUI(ctx);
     
@@ -316,13 +337,21 @@ function GameContent() {
       if (e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
       }
-      if (e.key in keysRef.current && !e.repeat) {
-          keysRef.current[e.key as keyof typeof keysRef.current] = true;
+       if(e.code === 'Space') {
+          keysRef.current[' '] = true;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          keysRef.current[e.key] = true;
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key in keysRef.current) {
-          keysRef.current[e.key as keyof typeof keysRef.current] = false;
+       if (e.key in keysRef.current || e.code === 'Space') {
+        if(e.code === 'Space') {
+            keysRef.current[' '] = false;
+        }
+        if(e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
+            keysRef.current[e.key] = false;
+        }
       }
     };
     
