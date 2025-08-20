@@ -39,10 +39,14 @@ function GameContent() {
   const [gameOver, setGameOver] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [keysPressed, setKeysPressed] = useState<{ [key: string]: boolean }>({
+    ArrowLeft: false,
+    ArrowRight: false,
+    ' ': false,
+  });
 
   // Player State
   const playerRef = useRef({ x: 100, y: 0, width: PLAYER_WIDTH, height: PLAYER_HEIGHT, health: 100, isSlashing: false, slashProgress: 0 });
-  const keysRef = useRef({ ArrowLeft: false, ArrowRight: false, ' ': false });
   
   // Bullets State
   const bulletsRef = useRef<{ x: number; y: number; width: number, height: number }[]>([]);
@@ -93,8 +97,6 @@ function GameContent() {
     // Draw Weapon
     const weaponArmX = rightArmX; 
     const weaponArmY = armY + armHeight / 2;
-    ctx.fillStyle = '#666';
-    ctx.strokeStyle = '#333';
     
     switch (weaponType) {
         case 'sword':
@@ -102,8 +104,8 @@ function GameContent() {
                 ctx.save();
                 ctx.strokeStyle = 'blue';
                 ctx.lineWidth = 5;
-                const slashCenterX = player.x + 30;
-                const slashCenterY = player.y - player.height / 2;
+                const slashCenterX = player.x + 10;
+                const slashCenterY = player.y - player.height / 2 + 10;
                 const startAngle = -Math.PI * 0.7;
                 const endAngle = startAngle + (Math.PI * 0.9 * player.slashProgress);
                 ctx.beginPath();
@@ -111,6 +113,8 @@ function GameContent() {
                 ctx.stroke();
                 ctx.restore();
             } else {
+                ctx.fillStyle = '#666';
+                ctx.strokeStyle = '#333';
                 ctx.save();
                 ctx.translate(weaponArmX, weaponArmY);
                 ctx.fillRect(0, -40, 5, 40); // blade
@@ -119,6 +123,7 @@ function GameContent() {
             }
             break;
         case 'gun':
+            ctx.fillStyle = '#666';
             ctx.fillRect(weaponArmX, weaponArmY - 5, 30, 10);
             break;
         case 'shield':
@@ -164,7 +169,7 @@ function GameContent() {
     const player = playerRef.current;
     switch (weaponType) {
         case 'gun':
-            const weaponArmX = player.x + 20;
+            const weaponArmX = player.x + (PLAYER_WIDTH / 2) - 25;
             const weaponArmY = player.y - player.height / 2 + 30;
             bulletsRef.current.push({
                 x: weaponArmX + 30, // fire from the tip of the gun
@@ -195,13 +200,13 @@ function GameContent() {
     const player = playerRef.current;
     
     // Player movement
-    if (keysRef.current.ArrowLeft) player.x -= PLAYER_SPEED;
-    if (keysRef.current.ArrowRight) player.x += PLAYER_SPEED;
+    if (keysPressed.ArrowLeft) player.x -= PLAYER_SPEED;
+    if (keysPressed.ArrowRight) player.x += PLAYER_SPEED;
 
     // Player attack
-    if (keysRef.current[' ']) {
+    if (keysPressed[' ']) {
         handleAttack();
-        keysRef.current[' '] = false; // Prevent continuous fire/swing
+         setKeysPressed(prev => ({...prev, ' ': false}));
     }
 
     // Canvas bounds
@@ -226,10 +231,11 @@ function GameContent() {
     }
 
     // Update bullets
-    bulletsRef.current = bulletsRef.current.filter(bullet => bullet.y > 0);
     bulletsRef.current.forEach(bullet => {
         bullet.y -= BULLET_SPEED;
     });
+    bulletsRef.current = bulletsRef.current.filter(bullet => bullet.y > 0);
+    
 
     // Update Meteors & check collisions
     for (let i = meteorsRef.current.length - 1; i >= 0; i--) {
@@ -245,7 +251,7 @@ function GameContent() {
             player.y - player.height / 2 < meteor.y + meteor.height &&
             player.y + player.height / 2 > meteor.y
         ) {
-            player.health -= 10;
+            player.health -= weaponType === 'shield' ? 0 : 10;
             meteorsRef.current.splice(i, 1);
             meteorRemoved = true;
             if (player.health <= 0) {
@@ -254,38 +260,43 @@ function GameContent() {
         }
 
         // Bullet-meteor collision
-        if (!meteorRemoved) {
-            for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
-                const bullet = bulletsRef.current[j];
-                if (
-                    bullet.x < meteor.x + meteor.width &&
-                    bullet.x + bullet.width > meteor.x &&
-                    bullet.y < meteor.y + meteor.height &&
-                    bullet.y + bullet.height > meteor.y
-                ) {
-                    bulletsRef.current.splice(j, 1);
-                    meteorsRef.current.splice(i, 1);
-                    setScore((prev) => prev + 10);
-                    meteorRemoved = true;
-                    break;
-                }
+        for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
+            if (meteorRemoved) break;
+            const bullet = bulletsRef.current[j];
+            if (
+                bullet.x < meteor.x + meteor.width &&
+                bullet.x + bullet.width > meteor.x &&
+                bullet.y < meteor.y + meteor.height &&
+                bullet.y + bullet.height > meteor.y
+            ) {
+                bulletsRef.current.splice(j, 1);
+                meteorsRef.current.splice(i, 1);
+                setScore((prev) => prev + 10);
+                meteorRemoved = true;
+                break; 
             }
         }
+        
+        if (meteorRemoved) continue;
+
 
         // Sword-meteor collision
-        if (!meteorRemoved && weaponType === 'sword' && player.isSlashing) {
-            const slashCenterX = player.x + 30;
-            const slashCenterY = player.y - player.height / 2;
+        if (weaponType === 'sword' && player.isSlashing) {
+            const slashCenterX = player.x + 10;
+            const slashCenterY = player.y - player.height / 2 + 10;
             const distance = Math.sqrt(Math.pow(meteor.x - slashCenterX, 2) + Math.pow(meteor.y - slashCenterY, 2));
-            if (distance > 30 && distance < 70) { // rough range of the slash
+            if (distance > 30 && distance < 70) { 
                 meteorsRef.current.splice(i, 1);
                 setScore(prev => prev + 10);
                 meteorRemoved = true;
             }
         }
+        
+        if (meteorRemoved) continue;
+
 
         // Shield-meteor collision
-        if (!meteorRemoved && weaponType === 'shield') {
+        if (weaponType === 'shield') {
             const shieldHitbox = {
                 x: player.x - player.width/2 - 35,
                 y: player.y - player.height/2,
@@ -299,13 +310,15 @@ function GameContent() {
                 meteor.y + meteor.height > shieldHitbox.y
             ) {
                 meteorsRef.current.splice(i, 1);
-                setScore((prev) => prev + 5); // Lower score for just blocking
+                setScore((prev) => prev + 5); 
                 meteorRemoved = true;
             }
         }
 
+        if (meteorRemoved) continue;
+
         // Remove meteor if it's off screen
-        if (!meteorRemoved && meteor.y > canvas.height) {
+        if (meteor.y > canvas.height) {
             meteorsRef.current.splice(i, 1);
         }
     }
@@ -320,7 +333,7 @@ function GameContent() {
     if (!gameOver) {
       gameLoopRef.current = requestAnimationFrame(gameLoop);
     }
-  }, [gameOver, score, weaponType, handleAttack]);
+  }, [gameOver, score, weaponType, handleAttack, keysPressed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -332,23 +345,18 @@ function GameContent() {
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        e.preventDefault();
-      }
-       if(e.code === 'Space') {
-          keysRef.current[' '] = true;
-      }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-          keysRef.current[e.key] = true;
-      }
+        if (e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const key = e.code === 'Space' ? ' ' : e.key;
+            setKeysPressed(prev => ({...prev, [key]: true}));
+        }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-          keysRef.current[' '] = false;
-      }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-          keysRef.current[e.key] = false;
-      }
+        if (e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const key = e.code === 'Space' ? ' ' : e.key;
+            setKeysPressed(prev => ({...prev, [key]: false}));
+        }
     };
     
     window.addEventListener('keydown', handleKeyDown);
@@ -399,6 +407,15 @@ function GameContent() {
       setIsSaving(false);
     }
   };
+  
+  const handleButtonPress = (key: string) => {
+    setKeysPressed(prev => ({ ...prev, [key]: true }));
+  };
+
+  const handleButtonRelease = (key: string) => {
+    setKeysPressed(prev => ({ ...prev, [key]: false }));
+  };
+
 
   const renderGameOver = () => (
     <Card className="w-full max-w-lg text-center shadow-lg bg-card text-card-foreground">
@@ -431,14 +448,14 @@ function GameContent() {
         <>
           <canvas ref={canvasRef} className="bg-gray-200 rounded-md shadow-lg" />
            <div className="flex gap-4 mt-4">
-             <Button onMouseDown={() => keysRef.current.ArrowLeft = true} onMouseUp={() => keysRef.current.ArrowLeft = false} onMouseLeave={() => keysRef.current.ArrowLeft = false} className="p-4">
+             <Button onMouseDown={() => handleButtonPress('ArrowLeft')} onMouseUp={() => handleButtonRelease('ArrowLeft')} onMouseLeave={() => handleButtonRelease('ArrowLeft')} className="p-4">
                <ArrowLeft /> Left
              </Button>
-             <Button onMouseDown={() => (keysRef.current[' '] = true)} onMouseUp={() => (keysRef.current[' '] = false)} className="p-4">
+             <Button onMouseDown={() => handleButtonPress(' ')} onMouseUp={() => handleButtonRelease(' ')} className="p-4">
                  {weaponType === 'shield' ? <ShieldAlert /> : <Zap />}
                  {weaponType === 'gun' ? 'Fire' : weaponType === 'sword' ? 'Swing' : 'Block'}
              </Button>
-             <Button onMouseDown={() => keysRef.current.ArrowRight = true} onMouseUp={() => keysRef.current.ArrowRight = false} onMouseLeave={() => keysRef.current.ArrowRight = false} className="p-4">
+             <Button onMouseDown={() => handleButtonPress('ArrowRight')} onMouseUp={() => handleButtonRelease('ArrowRight')} onMouseLeave={() => handleButtonRelease('ArrowRight')} className="p-4">
                Right <ArrowRight />
              </Button>
            </div>
