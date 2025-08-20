@@ -327,7 +327,7 @@ function GameContent() {
 
     // Draw everything
     drawPlayer(ctx, player);
-    drawProjectiles(ctx, bulletsRef.current, 'yellow');
+    drawProjectiles(ctx, bulletsRef.current, 'red');
     drawProjectiles(ctx, meteorsRef.current, 'orange');
     drawUI(ctx);
     
