@@ -169,11 +169,11 @@ function GameContent() {
     const player = playerRef.current;
     switch (weaponType) {
         case 'gun':
-            const weaponArmX = player.x + (PLAYER_WIDTH / 2) - 25;
-            const weaponArmY = player.y - player.height / 2 + 30;
+            const weaponArmX = player.x + PLAYER_WIDTH/2 + 5;
+            const weaponArmY = player.y - PLAYER_HEIGHT/2 + 25;
             bulletsRef.current.push({
-                x: weaponArmX + 30, // fire from the tip of the gun
-                y: weaponArmY - 5,
+                x: weaponArmX,
+                y: weaponArmY,
                 width: BULLET_WIDTH,
                 height: BULLET_HEIGHT
             });
@@ -203,10 +203,10 @@ function GameContent() {
     if (keysPressed.ArrowLeft) player.x -= PLAYER_SPEED;
     if (keysPressed.ArrowRight) player.x += PLAYER_SPEED;
 
-    // Player attack
+    // Player attack (from keyboard)
     if (keysPressed[' ']) {
         handleAttack();
-         setKeysPressed(prev => ({...prev, ' ': false}));
+         setKeysPressed(prev => ({...prev, ' ': false})); // Reset after one-shot
     }
 
     // Canvas bounds
@@ -251,17 +251,18 @@ function GameContent() {
             player.y - player.height / 2 < meteor.y + meteor.height &&
             player.y + player.height / 2 > meteor.y
         ) {
-            player.health -= weaponType === 'shield' ? 0 : 10;
+            player.health -= 10;
             meteorsRef.current.splice(i, 1);
             meteorRemoved = true;
             if (player.health <= 0) {
                 setGameOver(true);
             }
         }
+        if (meteorRemoved) continue;
+
 
         // Bullet-meteor collision
         for (let j = bulletsRef.current.length - 1; j >= 0; j--) {
-            if (meteorRemoved) break;
             const bullet = bulletsRef.current[j];
             if (
                 bullet.x < meteor.x + meteor.width &&
@@ -409,11 +410,17 @@ function GameContent() {
   };
   
   const handleButtonPress = (key: string) => {
-    setKeysPressed(prev => ({ ...prev, [key]: true }));
+    if (key === ' ') {
+      handleAttack();
+    } else {
+      setKeysPressed(prev => ({ ...prev, [key]: true }));
+    }
   };
 
   const handleButtonRelease = (key: string) => {
-    setKeysPressed(prev => ({ ...prev, [key]: false }));
+    if (key !== ' ') {
+      setKeysPressed(prev => ({ ...prev, [key]: false }));
+    }
   };
 
 
@@ -448,14 +455,34 @@ function GameContent() {
         <>
           <canvas ref={canvasRef} className="bg-gray-200 rounded-md shadow-lg" />
            <div className="flex gap-4 mt-4">
-             <Button onMouseDown={() => handleButtonPress('ArrowLeft')} onMouseUp={() => handleButtonRelease('ArrowLeft')} onMouseLeave={() => handleButtonRelease('ArrowLeft')} className="p-4">
+             <Button 
+                onMouseDown={() => handleButtonPress('ArrowLeft')} 
+                onMouseUp={() => handleButtonRelease('ArrowLeft')} 
+                onMouseLeave={() => handleButtonRelease('ArrowLeft')}
+                onTouchStart={() => handleButtonPress('ArrowLeft')}
+                onTouchEnd={() => handleButtonRelease('ArrowLeft')}
+                className="p-4"
+              >
                <ArrowLeft /> Left
              </Button>
-             <Button onMouseDown={() => handleButtonPress(' ')} onMouseUp={() => handleButtonRelease(' ')} className="p-4">
+             <Button 
+                onMouseDown={() => handleButtonPress(' ')} 
+                onMouseUp={() => handleButtonRelease(' ')}
+                onTouchStart={() => handleButtonPress(' ')}
+                onTouchEnd={() => handleButtonRelease(' ')}
+                className="p-4"
+              >
                  {weaponType === 'shield' ? <ShieldAlert /> : <Zap />}
                  {weaponType === 'gun' ? 'Fire' : weaponType === 'sword' ? 'Swing' : 'Block'}
              </Button>
-             <Button onMouseDown={() => handleButtonPress('ArrowRight')} onMouseUp={() => handleButtonRelease('ArrowRight')} onMouseLeave={() => handleButtonRelease('ArrowRight')} className="p-4">
+             <Button 
+                onMouseDown={() => handleButtonPress('ArrowRight')} 
+                onMouseUp={() => handleButtonRelease('ArrowRight')} 
+                onMouseLeave={() => handleButtonRelease('ArrowRight')}
+                onTouchStart={() => handleButtonPress('ArrowRight')}
+                onTouchEnd={() => handleButtonRelease('ArrowRight')}
+                className="p-4"
+              >
                Right <ArrowRight />
              </Button>
            </div>
