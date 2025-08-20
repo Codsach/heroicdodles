@@ -343,13 +343,11 @@ function GameContent() {
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-       if (e.key in keysRef.current || e.code === 'Space') {
-        if(e.code === 'Space') {
-            keysRef.current[' '] = false;
-        }
-        if(e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
-            keysRef.current[e.key] = false;
-        }
+      if (e.code === 'Space') {
+          keysRef.current[' '] = false;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          keysRef.current[e.key] = false;
       }
     };
     
@@ -463,6 +461,3 @@ export default function GamePage() {
       </Suspense>
     );
   }
-    
-    
-    
